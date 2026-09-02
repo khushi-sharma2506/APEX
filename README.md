@@ -9,7 +9,21 @@ Current institutional examination systems rely on static question papers that fa
 1. **Live Adaptive Testing Engine:** A highly concurrent server that uses OS-level predictive prefetching and LRU memory caching to deliver dynamic questions with sub-second latency.
 2. **Offline Exam Paper Generator:** A constraint-aware matching algorithm that queries a normalized (3NF) relational database to instantly generate perfectly balanced exam papers based on teacher-defined blueprints.
 
-## 📂 Project Architecture
+## 🏗️ System Architecture
+
+```mermaid
+graph TD
+    Client[Students & Teachers] -->|HTTP Requests| API[FastAPI Server]
+    API -->|Background Prefetching| Cache[LRU In-Memory Cache]
+    API -->|Blueprint Generation| Algo[Constraint-Aware Algorithm]
+    
+    Cache -.->|Cache Miss| DB[(SQLite Database 3NF)]
+    Algo -->|SQL Queries| DB
+    
+    CSV[Raw CSV Datasets] -->|Data Ingestion Script| DB
+```
+
+## 📂 Project Structure
 
 ```text
 APEX/
@@ -31,6 +45,6 @@ APEX/
 | Team Member | Role / Focus Area | Key Responsibilities (OS & DBMS) | Assigned File |
 | :--- | :--- | :--- | :--- |
 | **Khushi Sharma (Lead)** | Server Architecture & Concurrency | **OS:** FastAPI Thread Pool Executor.<br>**DBMS:** Database Schema & Connection. | `src/main.py`<br>`src/database.py` |
-| **Roma Yadav** | Database & Data Engineering | **OS:** Mutexes for concurrent data loading.<br>**DBMS:** SQLite CSV Ingestion & basic SQL. | `scripts/import_csv.py` |
-| **Rohit Sharma** | OS Memory Management | **OS:** LRU Page Replacement simulation.<br>**DBMS:** Indexing concepts for cache misses. | `src/cache.py` |
+| **Rohit Sharma** | Database & Data Engineering | **OS:** Mutexes for concurrent data loading.<br>**DBMS:** SQLite CSV Ingestion & basic SQL. | `scripts/import_csv.py` |
+| **Roma Yadav** | OS Memory Management | **OS:** LRU Page Replacement simulation.<br>**DBMS:** Indexing concepts for cache misses. | `src/cache.py` |
 | **Alok Goyal** | Algorithm & Logic Engineering | **OS:** Background processing.<br>**DBMS:** Complex constraint matching queries. | `src/blueprint.py` |
