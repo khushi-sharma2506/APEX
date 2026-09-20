@@ -4,30 +4,43 @@ import os
 DB_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "apex.db")
 
 def init_db():
-    """Initialize the SQLite database and create the questions table."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     
-    # Create the core Questions table with the metadata we discussed
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS questions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question_text TEXT NOT NULL,
-            difficulty TEXT NOT NULL,
-            topic TEXT NOT NULL,
-            question_type TEXT NOT NULL,
-            source_book TEXT
+        CREATE TABLE IF NOT EXISTS topics (
+            topic_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic_name TEXT NOT NULL
         )
     """)
     
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS questions (
+            q_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question_text TEXT NOT NULL,
+            diff_level TEXT NOT NULL,
+            topic_id INTEGER,
+            FOREIGN KEY (topic_id) REFERENCES topics (topic_id)
+        )
+    """)
+    
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS student_sessions (
+            session_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id TEXT NOT NULL,
+            current_score INTEGER DEFAULT 0,
+            questions_seen TEXT DEFAULT ''
+        )
+    """)
+    
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_diff_topic ON questions(diff_level, topic_id)")
+    
     conn.commit()
     conn.close()
-    print(f"Database initialized successfully at {DB_FILE}")
 
 def get_db_connection():
-    """Helper function to get a database connection."""
     conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row # This lets us access columns by name
+    conn.row_factory = sqlite3.Row
     return conn
 
 if __name__ == "__main__":
