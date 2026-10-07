@@ -118,7 +118,7 @@ function setLTab(r){
 $('#lTabs').addEventListener('click',e=>{const b=e.target.closest('[data-lr]'); if(b) setLTab(b.dataset.lr)});
 $('#lForgot').onclick=()=>{$('#lHelp').hidden=false};
 $('#lShow').onclick=()=>{const p=$('#lpw'),s=p.type==='password'; p.type=s?'text':'password'; $('#lShow').textContent=s?'Hide':'Show'; $('#lShow').setAttribute('aria-label',s?'Hide password':'Show password')};
-function fieldErr(k,m){ const e=$('#'+k+'Err'); e.textContent=m; e.hidden=.m; }
+function fieldErr(k,m){ const e=$('#'+k+'Err'); e.textContent=m; e.hidden=!m; }
 function niceName(email){ const w=email.split('@')[0].split(/[._-]+/).filter(Boolean).map(x=>x[0].toUpperCase()+x.slice(1)); return w.join(' ')||'Teacher'; }
 
 $('#lForm').addEventListener('submit', async e=>{
@@ -205,9 +205,9 @@ function renderQ(){
   $('#exNext').disabled=true; $('#exNext').textContent = ex.i===QS.length-1?'Submit exam':'Save and continue';
 }
 function pick(k){
-  const labels=$$('#exBody .opt'); if(.labels[k]) return;
+  const labels=$$('#exBody .opt'); if(!labels[k]) return;
   labels.forEach((l,i)=>{l.classList.toggle('sel',i===k); l.querySelector('input').checked=i===k});
-  ex.sel=k; $('#exNext').disabled=false; $('#exSave').textContent='Saving...'; setTimeout(()=>{ if(ex&&.ex.done) $('#exSave').textContent='Saved' },500);
+  ex.sel=k; $('#exNext').disabled=false; $('#exSave').textContent='Saving...'; setTimeout(()=>{ if(ex&&!ex.done) $('#exSave').textContent='Saved' },500);
 }
 $('#exBody').addEventListener('change',e=>{ if(e.target.name==='o') pick(+e.target.value) });
 $('#exNext').onclick=()=>{ if(ex.sel===null) return; ex.i++; ex.i>=QS.length ? finish(false) : renderQ(); };
@@ -220,7 +220,7 @@ function closeExam(){ if(ex) clearInterval(ex.t); $('#exam').hidden=true; ex=nul
 $('#exExit').onclick=closeExam;
 $('#exBody').addEventListener('click',e=>{ if(e.target.id==='backExams') closeExam() });
 document.addEventListener('keydown',e=>{
-  if($('#exam').hidden||.ex||ex.done) return;
+  if($('#exam').hidden||!ex||ex.done) return;
   const k={a:0,b:1,c:2,d:3,'1':0,'2':1,'3':2,'4':3}[e.key.toLowerCase()];
   if(k!==undefined && document.activeElement.tagName!=='INPUT'||k!==undefined&&document.activeElement.type==='radio') pick(k);
   else if(e.key==='Enter' && ex.sel!==null && document.activeElement.tagName!=='BUTTON') $('#exNext').click();
@@ -485,7 +485,7 @@ function updatePaperSum() {
   
   const target = parseInt($('#bpTargetMarks').value);
   $('#targetCompare').textContent = target ? (marks === target ? '(Matches target)' : `(Target: ${target})`) : '';
-  $('#targetCompare').style.color = (target && marks .== target) ? 'var(--bad)' : 'var(--muted)';
+  $('#targetCompare').style.color = (target && marks !== target) ? 'var(--bad)' : 'var(--muted)';
   
   let msgHTML = '';
   if(errors.length) {
