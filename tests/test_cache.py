@@ -9,13 +9,11 @@ missing-key handling.
 import os
 import sys
 
-# Add the src/ directory to the import path so we can import cache.py.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from cache import LRUCache
 
 
-# ---- Test 1: A new key/value can be inserted ----
 
 def test_put_inserts_key():
     cache = LRUCache(capacity=3)
@@ -25,7 +23,6 @@ def test_put_inserts_key():
     assert 1 in cache.cache
 
 
-# ---- Test 2: An inserted value can be retrieved ----
 
 def test_get_returns_correct_value():
     cache = LRUCache(capacity=3)
@@ -37,7 +34,6 @@ def test_get_returns_correct_value():
     assert result == {"question": "What is an OS?"}
 
 
-# ---- Test 3: Retrieving an existing key updates its recency ----
 
 def test_get_updates_recency():
     """
@@ -53,10 +49,8 @@ def test_get_updates_recency():
     cache.put(2, {"question": "B"})
     cache.put(3, {"question": "C"})
 
-    # Access key 1 — makes it the most recently used.
     cache.get(1)
 
-    # Insert a 4th item — should evict key 2.
     cache.put(4, {"question": "D"})
 
     assert cache.get(1) is not None, "Key 1 should still be in the cache"
@@ -65,7 +59,6 @@ def test_get_updates_recency():
     assert cache.get(4) is not None, "Key 4 should still be in the cache"
 
 
-# ---- Test 4: Updating an existing key works correctly ----
 
 def test_update_existing_key():
     cache = LRUCache(capacity=3)
@@ -77,11 +70,9 @@ def test_update_existing_key():
 
     assert result == {"question": "Updated"}, "Value should be updated"
 
-    # Updating an existing key should not create a second entry.
     assert len(cache.cache) == 1
 
 
-# ---- Test 5: Eviction at capacity 3 ----
 
 def test_eviction_at_capacity_3():
     """Insert 4 items into a cache of capacity 3 → first item is evicted."""
@@ -99,7 +90,6 @@ def test_eviction_at_capacity_3():
     assert len(cache.cache) == 3
 
 
-# ---- Test 6: Eviction at capacity 100 (assignment requirement) ----
 
 def test_eviction_at_capacity_100():
     """
@@ -110,14 +100,11 @@ def test_eviction_at_capacity_100():
     """
     cache = LRUCache(capacity=100)
 
-    # Insert 100 items (keys 1 through 100).
     for i in range(1, 101):
         cache.put(i, {"question": f"Q{i}"})
 
     assert len(cache.cache) == 100
 
-    # Insert the 101st item.
-    # Key 1 is the least recently used item and must be evicted.
     cache.put(101, {"question": "Q101"})
 
     assert cache.get(1) is None, "Key 1 must be evicted after 101st insertion"
@@ -126,7 +113,6 @@ def test_eviction_at_capacity_100():
     assert len(cache.cache) == 100, "Cache size should remain at capacity"
 
 
-# ---- Test 7: Accessing an older item changes which item gets evicted ----
 
 def test_access_changes_eviction_target():
     """
@@ -142,10 +128,8 @@ def test_access_changes_eviction_target():
     cache.put(2, {"question": "B"})
     cache.put(3, {"question": "C"})
 
-    # Access key 1 — LRU order is now 2, 3, 1.
     cache.get(1)
 
-    # Insert key 4 — evicts key 2.
     cache.put(4, {"question": "D"})
 
     assert cache.get(2) is None, "Key 2 should have been evicted"
@@ -154,7 +138,6 @@ def test_access_changes_eviction_target():
     assert cache.get(4) is not None, "Key 4 should be present"
 
 
-# ---- Test 8: Missing-key behavior ----
 
 def test_missing_key_returns_none():
     cache = LRUCache(capacity=3)
