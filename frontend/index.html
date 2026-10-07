@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>APEX: Adaptive Paper Engine for eXaminations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!-- LANDING -->
+<div class="site" id="landing">
+  <header class="lnav"><div class="lnav-in">
+    <a class="lb" data-top><span class="mark" aria-hidden="true">A</span>APEX</a>
+    <nav class="links" aria-label="Page sections"><a data-scroll="#how">How it works</a><a data-scroll="#roles">Who it is for</a><a data-scroll="#speed">Performance</a></nav>
+    <button class="btn primary" data-login>Sign in</button>
+  </div></header>
+  <main>
+    <div class="wrap hero">
+      <div>
+        <h1 class="ha">Exams that adapt to every student</h1>
+        <p class="lead ha" style="animation-delay:.1s">APEX gives each student questions that match how they are doing, helps teachers build balanced papers in minutes, and stays fast when a whole class logs in at once.</p>
+        <div class="cta ha" style="animation-delay:.2s"><button class="btn primary lg" data-login>Sign in</button><button class="btn lg" data-scroll="#how">See how it works</button></div>
+      </div>
+      <div class="ha" style="animation-delay:.25s">
+        <div class="mock" aria-hidden="true">
+          <div class="mock-top"><b>Operating Systems and DBMS</b><span class="timer num">06:42</span></div>
+          <div class="mock-prog"><i style="width:50%"></i></div>
+          <div class="mock-body">
+            <div class="sub">Question 4 of 8</div>
+            <div class="vq">Logical data independence means the ability to change:</div>
+            <div class="vo"><span class="key">A</span>The disk hardware</div>
+            <div class="vo sel"><span class="key">B</span>The conceptual schema without changing external schemas</div>
+            <div class="vo"><span class="key">C</span>The indexes only</div>
+            <div class="vo"><span class="key">D</span>The operating system</div>
+          </div>
+          <div class="mock-foot"><span class="sub">Saved</span><span class="btn primary">Save and continue</span></div>
+        </div>
+        <p class="cap">Sample screen. During a real exam, students never see correctness, scores or difficulty.</p>
+      </div>
+    </div>
+
+    <div class="wrap"><div class="stats rv">
+      <div><div class="big"><span data-count="500">500</span></div><div class="sub">questions in the bank</div></div>
+      <div><div class="big"><span data-count="10">10</span></div><div class="sub">syllabus units covered</div></div>
+      <div><div class="big"><span data-count="2">2</span></div><div class="sub">subjects: Operating Systems and DBMS</div></div>
+      <div><div class="big"><span data-count="60" data-suffix="+">60+</span></div><div class="sub">students per test, our design target</div></div>
+    </div></div>
+
+    <section class="wrap sect" id="how">
+      <h2 class="rv">From question bank to results in four steps</h2>
+      <p class="intro rv">Teachers prepare once. Students get a calm, focused exam. Everyone sees only what they should.</p>
+      <div class="story">
+        <div class="steps" id="steps">
+          <article class="step" data-i="0"><span class="n">1</span><h3>Build the question bank</h3><p>Drop in a CSV. APEX checks every row for subject, topic, unit, marks and options before anything is saved, and tells you exactly which rows to fix.</p><div class="step-vis" data-v="0"></div></article>
+          <article class="step" data-i="1"><span class="n">2</span><h3>Set a blueprint, get a balanced paper</h3><p>Choose topics, difficulty, marks, and how many questions to offer and attempt. APEX draws a paper without repeating a question and warns you if the bank runs short.</p><div class="step-vis" data-v="1"></div></article>
+          <article class="step" data-i="2"><span class="n">3</span><h3>Students take a focused exam</h3><p>One question at a time, with the next one already loaded. The difficulty adapts in the background, and nothing about it appears on screen.</p><div class="step-vis" data-v="2"></div></article>
+          <article class="step" data-i="3"><span class="n">4</span><h3>Release results when you are ready</h3><p>You decide how much students see: scores only, right or wrong, or a full review with correct answers. Results never release while the exam is still open.</p><div class="step-vis" data-v="3"></div></article>
+        </div>
+        <div class="stage" id="stage" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <section class="wrap sect" id="roles">
+      <h2 class="rv">One platform, two kinds of user</h2>
+      <div class="roles rv">
+        <div class="role"><h3>Teachers</h3><ul><li>Import questions from CSV with row-by-row checks</li><li>Set a blueprint and get a balanced paper</li><li>Choose how much students see afterwards</li><li>Mark subjective answers, then release results</li><li>Watch live question speed and cache performance</li></ul></div>
+        <div class="role"><h3>Students</h3><ul><li>See only the exams assigned to you</li><li>Get questions that match how you are doing</li><li>Have every answer saved as you go</li><li>Review your results when your teacher releases them</li></ul></div>
+      </div>
+    </section>
+
+    <section class="wrap sect" id="speed">
+      <div class="speed">
+        <div class="rv">
+          <h2>Fast when the whole class logs in at once</h2>
+          <p class="intro">Waiting for the next question is the first thing students notice. APEX keeps popular questions in memory with a least-recently-used cache, and loads the likely next questions before the student answers.</p>
+        </div>
+        <div class="bars rv" id="bars">
+          <h3>Average time to serve the next question (simulated)</h3>
+          <div class="brow"><span>No cache</span><div class="btrack"><i style="width:100%"></i></div><b class="num">19.7 ms</b></div>
+          <div class="brow"><span>Cache only</span><div class="btrack"><i style="width:78%"></i></div><b class="num">15.3 ms</b></div>
+          <div class="brow"><span>Cache with prefetch</span><div class="btrack"><i class="best" style="width:31%"></i></div><b class="num">6.2 ms</b></div>
+          <p class="cap">Simulated workload: 40 students and 100 cache slots. Measured results appear on the teacher Performance page.</p>
+        </div>
+      </div>
+    </section>
+
+    <div class="wrap"><div class="band rv">
+      <div><h2>Ready for your next exam?</h2><p>Sign in with your university account.</p></div>
+      <button class="btn inv lg" data-login>Sign in</button>
+    </div></div>
+  </main>
+  <footer class="wrap"><div class="foot">APEX, the Adaptive Paper Engine for eXaminations. A B.Tech CSE project by The Arcane Coders (team OSDBMS-V-2026-T136) at Graphic Era.</div></footer>
+</div>
+
+<!-- LOGIN -->
+<div class="site" id="login" hidden>
+  <div class="login">
+    <aside class="login-side">
+      <a class="lb" data-home><span class="mark" aria-hidden="true">A</span>APEX</a>
+      <div><h2>Adaptive exams, built for your class</h2><p>Sign in with your university account to take an exam or manage your question bank.</p></div>
+      <p style="font-size:13px;margin:0">Adaptive Paper Engine for eXaminations</p>
+    </aside>
+    <main class="login-main"><div class="lcard">
+      <a class="lb mob" data-home><span class="mark" aria-hidden="true">A</span>APEX</a>
+      <h1 id="lTitle">Sign in</h1>
+      <p class="sub" id="lSub" style="margin-top:6px">Choose how you use APEX.</p>
+      <div class="tabs" id="lTabs" role="tablist" aria-label="Account type">
+        <button role="tab" data-lr="student" aria-selected="true">Student</button>
+        <button role="tab" data-lr="teacher" aria-selected="false">Teacher</button>
+      </div>
+      <form id="lForm" novalidate>
+        <label class="field"><span id="lidLabel">Enrollment number</span><input class="input" id="lid" autocomplete="username" placeholder="e.g. STU12345"><div class="err" id="lidErr" hidden></div></label>
+        <label class="field" style="margin-top:14px"><span>Password</span><div class="pw"><input class="input" id="lpw" type="password" autocomplete="current-password"><button type="button" class="btn quiet" id="lShow" aria-label="Show password">Show</button></div><div class="err" id="lpwErr" hidden></div></label>
+        <div class="alert" id="lAlert" hidden role="alert"></div>
+        <button class="btn primary lg" id="lGo" type="submit" style="width:100%;margin-top:18px">Sign in</button>
+      </form>
+      <div class="lfoot"><button class="linkbtn" id="lForgot" type="button">Forgot password?</button></div>
+      <p class="sub" id="lHelp" style="margin-top:12px" hidden>Ask your teacher to reset your password. Teachers should contact the project owner.</p>
+      <p class="sub" style="margin-top:28px;font-size:12px">Prototype: any details work, but the form checks that your details match the account type you chose, as the real server will.</p>
+    </div></main>
+  </div>
+</div>
+
+<div id="appShell" hidden>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">A</div>
+      <div><b>APEX</b><small>Adaptive Paper Engine for eXaminations</small></div>
+    </div>
+    <nav class="nav" id="nav" aria-label="Main"></nav>
+    <div class="user"><div class="avatar" id="uAv" aria-hidden="true">U</div><div class="who"><b id="uName">User</b><span id="uRole">Role</span></div><button class="btn quiet" id="signout">Sign out</button></div>
+  </aside>
+
+  <div class="main">
+    <div class="page">
+      <!-- TEACHER: dashboard -->
+      <section class="view" id="view-tdash" hidden>
+        <div class="head"><div><h1 id="tdGreet">Good morning</h1><p>Here is what needs your attention today.</p></div>
+          <div class="qa"><button class="btn" id="qaImport">Import questions</button><button class="btn primary" id="qaCreate">Create exam</button></div></div>
+        <div class="kpis">
+          <div class="card kpi"><div class="sub">Questions in the bank</div><div class="v num">500</div></div>
+          <div class="card kpi"><div class="sub">Open exams</div><div class="v num" id="tdOpen">0</div></div>
+          <div class="card kpi"><div class="sub">Answers to mark</div><div class="v num" id="tdMark">0</div></div>
+          <div class="card kpi"><div class="sub">Results ready to release</div><div class="v num" id="tdReady">0</div></div>
+        </div>
+        <div class="two" style="grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)">
+          <div class="card"><div class="pad" style="padding-bottom:12px"><h2>Needs your attention</h2></div><div id="tdAttn" style="border-top:1px solid var(--line)"></div></div>
+          <div class="card pad"><h2>Question bank by difficulty</h2>
+            <div class="stack" role="img" aria-label="150 easy, 200 medium and 150 hard questions"><i style="width:30%;background:var(--ok)"></i><i style="width:40%;background:var(--c3)"></i><i style="width:30%;background:var(--bad)"></i></div>
+            <div class="leg2"><span>Easy <b>150</b></span><span>Medium <b>200</b></span><span>Hard <b>150</b></span></div>
+            <p class="sub" style="margin-top:14px">250 questions each for Operating Systems and DBMS, split evenly between MCQ and subjective.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- TEACHER: exams -->
+      <section class="view" id="view-texams" hidden>
+        <div class="head"><div><h1>Exams</h1><p>Track submissions, mark answers and decide when students see their results.</p></div><button class="btn primary" id="newExam">Create exam</button></div>
+        <div class="card"><div class="scroll"><table class="tbl"><thead><tr><th>Exam</th><th>Mode</th><th>Window</th><th>Submitted</th><th>Status</th><th></th></tr></thead><tbody id="texRows"></tbody></table></div></div>
+      </section>
+
+      <!-- STUDENT: results -->
+      <section class="view" id="view-results" hidden>
+        <div class="head"><div><h1>Results</h1><p>Results appear here after your teacher releases them. How much you see is your teacher's choice.</p></div></div>
+        <div class="card" id="resList"></div>
+      </section>
+
+      <!-- STUDENT: exams -->
+      <section class="view" id="view-exams">
+        <div class="head"><div><h1>My exams</h1><p>Exams your teachers have assigned to you. You can only start an exam while it is open.</p></div></div>
+        <div class="two">
+          <div class="card" id="examList"></div>
+          <div class="card pad">
+            <h2>System check</h2>
+            <p class="sub" style="margin:4px 0 8px">Run this before an exam to catch problems early.</p>
+            <div id="checks"></div>
+            <button class="btn" id="runCheck" style="margin-top:14px;width:100%">Run system check</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TEACHER: bank -->
+      <section class="view" id="view-bank" hidden>
+        <div class="head">
+          <div><h1>Question bank</h1><p>Search, filter and review every question. Showing a sample of the full 500-question bank.</p></div>
+          <button class="btn primary" id="openImport">Import CSV</button>
+        </div>
+        <div class="card">
+          <div class="filters">
+            <label class="field"><span>Search</span><input class="input" id="fq" type="search" placeholder="Search question text"></label>
+            <label class="field">
+  <div style="display:flex;justify-content:space-between;align-items:center">
+    <span>Subject</span>
+    <a href="#" id="btnAddSubject" style="font-size:12px;color:var(--brand);text-decoration:none;font-weight:600">+ Add private pool</a>
+  </div>
+  <select class="select" id="fs"><option value="">All subjects</option></select>
+</label>
+            <label class="field"><span>Difficulty</span><select class="select" id="fd"><option value="">All levels</option><option>Easy</option><option>Medium</option><option>Hard</option></select></label>
+            <label class="field"><span>Type</span><select class="select" id="ft"><option value="">All types</option><option value="MCQ">MCQ</option><option value="SUBJECTIVE">Subjective</option></select></label>
+          </div>
+          <div class="scroll"><table class="tbl"><thead><tr><th>Question</th><th>Type</th><th>Difficulty</th><th>Marks</th><th>Topic</th></tr></thead><tbody id="bankRows"></tbody></table></div>
+          <div class="sub" id="bankCount" style="padding:12px 20px;border-top:1px solid var(--line)"></div>
+        </div>
+      </section>
+
+      <!-- TEACHER: blueprint -->
+      <section class="view" id="view-blueprint" hidden>
+        <div class="head">
+          <div><h1>Generate Question Paper</h1><p>Generate a written paper for printing.</p></div>
+        </div>
+        
+        <div id="paneWritten" class="bp">
+          <div class="card">
+            <div class="sec">
+              <div class="grid g2">
+                <label class="field"><span>Paper title</span><input class="input" id="bpTitle" placeholder="e.g. Operating Systems mid-sem paper"></label>
+                <label class="field"><span>Subject</span><select class="select" id="bpSubject"></select></label>
+                <label class="field" style="grid-column:1/-1"><span>Target Total Marks (Optional)</span><input class="input" type="number" id="bpTargetMarks" placeholder="e.g. 50"></label>
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px" id="presets">
+                <button class="btn" data-preset="mid">Mid-term (5Q, 2 parts, attempt 1)</button>
+                <button class="btn" data-preset="end">End-term (5Q, 3 parts, attempt 2)</button>
+              </div>
+            </div>
+            <div id="sections"></div>
+            <div class="sec"><button class="btn" id="addSec">Add question</button></div>
+          </div>
+          <aside class="card pad sticky" aria-live="polite">
+            <h2>Paper summary</h2>
+            <div class="stat"><span class="sub">Total marks</span><b class="num" id="sumMarks">0</b> <span id="targetCompare" style="font-size:12px;margin-left:4px"></span></div>
+            <div class="stat"><span class="sub">Questions drawn from bank</span><b class="num" id="sumDraw">0</b></div>
+            <div class="stat"><span class="sub">Parts students answer</span><b class="num" id="sumAns">0</b></div>
+            <div id="checksBp" style="margin-top:12px;display:flex;flex-direction:column;gap:6px"></div>
+            
+            <button class="btn" id="btnValidate" style="width:100%;margin-top:16px;margin-bottom:8px">Validate</button>
+            <button class="btn primary" id="gen" style="width:100%" disabled>Generate paper</button>
+          </aside>
+        </div>
+
+      </section>
+
+      <!-- TEACHER: create exam (online) -->
+      <section class="view" id="view-create-exam" hidden>
+        <div class="head">
+          <div><h1>Create Exam</h1><p>Create a live digital exam for students.</p></div>
+        </div>
+        
+        <div id="paneOnline" class="bp">
+           <div class="card pad">
+             <div class="grid g2" style="gap:16px">
+                <label class="field" style="grid-column:1/-1"><span>Exam title</span><input class="input" id="oaTitle" value="Online MCQ Test"></label>
+                <label class="field"><span>Subject</span><select class="select" id="oaSubject"></select></label>
+                <div class="field" style="grid-column:1/-1">
+                   <span>Topics</span>
+                   <div id="oaTopics" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;border:1px solid var(--line);padding:12px;border-radius:6px;max-height:150px;overflow-y:auto">
+                   </div>
+                </div>
+                <label class="field"><span>Number of questions</span><input class="input" type="number" id="oaNumQ" value="20" min="1" max="50"></label>
+                <label class="field"><span>Duration (minutes)</span><input class="input" type="number" id="oaDur" value="30" min="5" max="180"></label>
+                <label class="field"><span>Starting difficulty</span><select class="select" id="oaStart"><option>Easy</option><option selected>Medium</option><option>Hard</option></select></label>
+                <label class="field"><span>Marks mode</span>
+                   <div style="display:flex;gap:16px;margin-top:6px">
+                     <label><input type="radio" name="oaMarksMode" value="1 mark for all" checked> 1 mark for all</label>
+                     <label><input type="radio" name="oaMarksMode" value="Use marks from question bank"> Use marks from question bank</label>
+                   </div>
+                </label>
+                <label class="field" style="grid-column:1/-1"><span>Review visibility</span>
+                   <select class="select" id="oaRev">
+                     <option value="score_only">Score only</option>
+                     <option value="score_and_correctness" selected>Score and right or wrong</option>
+                     <option value="full_review">Full review</option>
+                   </select>
+                </label>
+             </div>
+           </div>
+           
+           <aside class="card pad sticky">
+              <h2>Pool check</h2>
+              <div class="stat"><span class="sub">Total MCQs available</span><b class="num" id="pcTotal">0</b></div>
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin:8px 0;color:var(--muted)">
+                 <span id="pcEasy">Easy: 0</span>
+                 <span id="pcMed">Medium: 0</span>
+                 <span id="pcHard">Hard: 0</span>
+              </div>
+              <div id="pcAlerts" style="margin-top:12px;display:flex;flex-direction:column;gap:6px"></div>
+              
+              <button class="btn primary" id="oaCreate" style="width:100%;margin-top:20px" disabled>Create exam</button>
+           </aside>
+        </div>
+      </section>
+
+      <!-- TEACHER: performance -->
+      <section class="view" id="view-perf" hidden>
+        <div class="head">
+          <div><h1>Performance</h1><p>How fast APEX serves the next question under load. Numbers come from a simulated workload running in this page.</p></div>
+          <span class="badge brand">Simulation</span>
+        </div>
+        <div class="kpis">
+          <div class="card kpi"><div class="sub">Active students</div><div class="v num" id="kStud">40</div></div>
+          <div class="card kpi"><div class="sub">Average latency</div><div class="v num"><span id="kAvg">0</span><small>ms</small></div></div>
+          <div class="card kpi"><div class="sub">95th percentile latency</div><div class="v num"><span id="kP95">0</span><small>ms</small></div></div>
+          <div class="card kpi"><div class="sub">Cache hit ratio</div><div class="v num"><span id="kHit">0</span><small>%</small></div></div>
+        </div>
+        <div class="card" style="margin-bottom:20px">
+          <div class="ctrls">
+            <button class="switch" id="swCache" role="switch" aria-checked="true"><i></i><span>Cache</span></button>
+            <button class="switch" id="swPre" role="switch" aria-checked="true"><i></i><span>Prefetch next questions</span></button>
+            <label class="range"><span>Students</span><input type="range" id="rgStud" min="10" max="80" step="5" value="40"><b class="num" id="rgStudV">40</b></label>
+            <label class="range"><span>Cache slots</span><select class="select" id="selCap" style="width:96px"><option>50</option><option selected>100</option><option>200</option></select></label>
+          </div>
+        </div>
+        <div class="cols">
+          <div class="card pad">
+            <h2>Question serve latency, last 60 seconds</h2>
+            <svg id="chart" viewBox="0 0 720 240" width="100%" role="img" aria-label="Latency chart" style="margin-top:10px;display:block"></svg>
+            <div class="legend"><span><i style="background:var(--c2)"></i>Average</span><span><i style="background:var(--c1)"></i>95th percentile</span></div>
+          </div>
+          <div class="card pad">
+            <h2>Cache contents</h2>
+            <p class="sub" style="margin-top:4px"><span id="slotUse">0</span> of <span id="slotCap">100</span> slots used. Darker squares were used more recently.</p>
+            <div class="slots" id="slots" aria-hidden="true"></div>
+            <p class="sub" style="margin-top:16px">Recently evicted question IDs</p>
+            <div class="evicted" id="evicted"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="pad" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+            <div><h2>Compare configurations</h2><p class="sub" style="margin-top:4px">Runs the same simulated load for 150 seconds with each setup, using the student count and cache size above.</p></div>
+            <button class="btn" id="runCmp">Run comparison</button>
+          </div>
+          <div class="scroll"><table class="tbl" style="min-width:520px"><thead><tr><th>Setup</th><th>Average latency</th><th>95th percentile</th><th>Cache hit ratio</th></tr></thead><tbody id="cmpRows"><tr><td colspan="4" class="sub">Press Run comparison to fill this table.</td></tr></tbody></table></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- live exam -->
+<div class="exam" id="exam" hidden role="dialog" aria-modal="true" aria-label="Live exam">
+  <header class="exam-top">
+    <div class="t" id="exTitle">Mixed practice quiz</div>
+    <div class="mid"><div class="sub num" id="exCount">Question 1 of 8</div><div class="prog"><i id="exBar"></i></div></div>
+    <div class="right"><span class="sub" id="exSave" aria-live="polite"></span><span class="timer" id="exTimer" role="timer">10:00</span><button class="btn quiet" id="exExit">Exit demo</button></div>
+  </header>
+  <div class="exam-body"><div class="qwrap" id="exBody"></div></div>
+  <footer class="exam-foot" id="exFoot">
+    <span class="sub">You cannot go back to earlier questions in this exam.</span>
+    <button class="btn primary" id="exNext" disabled>Save and continue</button>
+  </footer>
+</div>
+
+<dialog id="startDlg">
+  <div class="dlg-body">
+    <h2 style="font-size:20px;letter-spacing:-.01em">Before you begin</h2>
+    <p class="sub" style="margin:6px 0 16px" id="startSub"></p>
+    <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
+      <li>Each answer is saved when you continue.</li>
+      <li>You cannot go back to a previous question.</li>
+      <li>Refreshing the page will not reset your timer.</li>
+      <li>Your teacher decides when results are released.</li>
+    </ul>
+  </div>
+  <div class="dlg-foot"><button class="btn" id="startCancel">Cancel</button><button class="btn primary" id="startGo">Begin exam</button></div>
+</dialog>
+
+<dialog id="importDlg">
+  <div class="dlg-body">
+    <h2 style="font-size:20px;letter-spacing:-.01em">Import questions from CSV</h2>
+    <p class="sub" style="margin:6px 0 16px">The file is checked in your browser and is not uploaded anywhere.</p>
+    <div class="drop"><input type="file" id="csvFile" accept=".csv,text/csv" hidden><label for="csvFile">Choose a CSV file</label> to check it.</div>
+    <div id="csvOut" aria-live="polite" style="margin-top:14px"></div>
+  </div>
+  <div class="dlg-foot"><button class="btn" id="importClose">Close</button></div>
+</dialog>
+
+<dialog id="relDlg">
+  <div class="dlg-body">
+    <h2 style="font-size:20px;letter-spacing:-.01em" id="relTitle">Release results</h2>
+    <p class="sub" style="margin:6px 0 4px" id="relSub"></p>
+    <div id="relLevels"></div>
+    <div class="note" id="relNote" hidden></div>
+  </div>
+  <div class="dlg-foot"><button class="btn" id="relCancel">Cancel</button><button class="btn primary" id="relGo">Release results</button></div>
+</dialog>
+<dialog id="revDlg" class="wide">
+  <div class="dlg-body"><h2 style="font-size:20px;letter-spacing:-.01em" id="revTitle"></h2><p class="sub" id="revSub" style="margin:6px 0 12px"></p><div class="scrolly" id="revBody"></div></div>
+  <div class="dlg-foot"><button class="btn" id="revClose">Close</button></div>
+</dialog>
+
+<dialog id="createExamDlg" class="wide">
+  <div class="dlg-body">
+    <h2 style="font-size:20px;letter-spacing:-.01em">Create exam</h2>
+    <p class="sub" style="margin:6px 0 20px">Fill in the details below. Students will see this exam on their dashboard immediately after you save it.</p>
+    <div class="grid g2" style="gap:14px">
+      <label class="field" style="grid-column:1/-1"><span>Exam title <span style="color:var(--bad)">*</span></span><input class="input" id="ceTitle" placeholder="e.g. OS Unit 2 Mid-term" maxlength="120"></label>
+      <label class="field"><span>Subject <span style="color:var(--bad)">*</span></span>
+        <select class="select" id="ceSubject">
+          <option value="">Choose subject…</option>
+          <option>Operating Systems</option>
+          <option>Database Management Systems</option>
+        </select>
+      </label>
+      <label class="field"><span>Mode</span>
+        <select class="select" id="ceMode">
+          <option value="adaptive">Adaptive (difficulty adjusts per student)</option>
+          <option value="fixed">Fixed paper (all students get same questions)</option>
+        </select>
+      </label>
+      <label class="field"><span>Number of questions</span><input class="input" type="number" id="ceNumQ" value="10" min="1" max="50"></label>
+      <label class="field"><span>Duration (minutes)</span><input class="input" type="number" id="ceDuration" value="30" min="5" max="180"></label>
+      <label class="field"><span>Starting difficulty</span>
+        <select class="select" id="ceStartDiff">
+          <option>Easy</option>
+          <option selected>Medium</option>
+          <option>Hard</option>
+        </select>
+      </label>
+      <label class="field"><span>Default result visibility</span>
+        <select class="select" id="ceReview">
+          <option value="score_only">Score only</option>
+          <option value="score_and_correctness" selected>Score and right or wrong</option>
+          <option value="full_review">Full review with correct answers</option>
+        </select>
+      </label>
+    </div>
+    <p class="sub" style="margin-top:16px;font-size:12px">Topics are drawn from the question bank for the selected subject. You can narrow topics further from the Question paper builder.</p>
+    <div id="ceErr" class="msg bad" style="margin-top:12px;display:none"></div>
+  </div>
+  <div class="dlg-foot"><button class="btn" id="ceCancel">Cancel</button><button class="btn primary" id="ceSave">Create exam</button></div>
+</dialog>
+
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script src="ui-logic.js" type="module"></script>
+</body>
+</html>
