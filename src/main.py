@@ -14,6 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from concurrent.futures import ThreadPoolExecutor
 import bcrypt
 import uuid
+import sys
+
+# Ensure src/ folder is in sys.path so modules like database, cache, etc. are found from anywhere
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database import migrate_db, get_db_connection, advance_difficulty, DIFFICULTY_LEVELS
 from blueprint import generate_university_paper
@@ -1150,5 +1154,5 @@ def fix_question_key(q_id: int, req: FixKeyReq, user: dict = Depends(require_tea
     return {"status": "success", "updated_sessions": len(updated_sessions)}
 
 
-    if os.path.isdir(_frontend):
-        app.mount("/ui", StaticFiles(directory=_frontend, html=True), name="frontend")
+if os.path.isdir(_frontend):
+    app.mount("/ui", StaticFiles(directory=_frontend, html=True), name="frontend")
