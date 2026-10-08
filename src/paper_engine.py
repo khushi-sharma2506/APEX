@@ -28,7 +28,6 @@ import random
 from typing import Optional
 
 
-# Helpers
 
 def _pool_count(cursor, subject_id: int, unit_number: int,
                 topic_id: Optional[int], difficulty: str,
@@ -90,7 +89,6 @@ def _pick_question(cursor, rng: random.Random, subject_id: int,
     return dict(row)
 
 
-# Validation
 
 def validate_blueprint(blueprint: dict, conn) -> list[dict]:
     """
@@ -109,7 +107,6 @@ def validate_blueprint(blueprint: dict, conn) -> list[dict]:
     target_marks = blueprint.get("target_marks")
     questions = blueprint.get("questions", [])
 
-    # Pool demand tracking: (unit_number, topic_id_or_None, difficulty) -> count needed
     pool_demand: dict[tuple, int] = {}
 
     total_marks = 0
@@ -123,40 +120,33 @@ def validate_blueprint(blueprint: dict, conn) -> list[dict]:
         parts = q.get("parts", [])
         unit = q.get("unit_number")
 
-        # 1. attempt_k <= offered_n
         if attempt_k > offered_n:
             issues.append({"level": "error",
                            "message": f"Attempt count ({attempt_k}) cannot exceed offered parts ({offered_n}).",
                            "location": loc})
 
-        # 2. parts count == offered_n
         if len(parts) != offered_n:
             issues.append({"level": "error",
                            "message": f"Has {len(parts)} part(s) but offered_n is {offered_n}. They must match.",
                            "location": loc})
 
-        # 3. Marks
         total_marks += attempt_k * marks_per_part
 
-        # 4. Pool demand per part
         for part in parts:
             key = (unit, part.get("topic_id"), part["difficulty"])
             pool_demand[key] = pool_demand.get(key, 0) + 1
 
-        # 5. Difficulty mismatch warning
         diffs = {p["difficulty"] for p in parts}
         if len(diffs) > 1:
             issues.append({"level": "warning",
                            "message": f"Parts have mixed difficulties ({', '.join(sorted(diffs))}). This is allowed but may affect balance.",
                            "location": loc})
 
-    # 3. Check target marks
     if target_marks is not None and target_marks != total_marks:
         issues.append({"level": "error",
                        "message": f"Blueprint total marks ({total_marks}) does not match target ({target_marks}).",
                        "location": "Paper"})
 
-    # 4. Check availability (no exclude list for validation — worst case)
     for (unit, topic_id, difficulty), needed in pool_demand.items():
         avail = _pool_count(cursor, subject_id, unit, topic_id, difficulty, [])
         if avail < needed:
@@ -169,7 +159,6 @@ def validate_blueprint(blueprint: dict, conn) -> list[dict]:
     return issues
 
 
-# Generation
 
 def generate_paper(blueprint: dict, seed: int, conn) -> dict:
     """
@@ -197,7 +186,6 @@ def generate_paper(blueprint: dict, seed: int, conn) -> dict:
         paper_questions = []
         failed = False
 
-        # Sort parts globally by pool size (most constrained first)
         all_slots = []
         for q in questions:
             for part in q["parts"]:
@@ -207,7 +195,6 @@ def generate_paper(blueprint: dict, seed: int, conn) -> dict:
                 all_slots.append((pool, q, part))
         all_slots.sort(key=lambda x: x[0])  # ascending = most constrained first
 
-        # Fill in constrained order, then assemble by q_no/part_label
         filled: dict[tuple[int, str], dict] = {}  # (q_no, part_label) -> row
 
         for _, q, part in all_slots:
@@ -217,7 +204,6 @@ def generate_paper(blueprint: dict, seed: int, conn) -> dict:
                                  q["unit_number"], part.get("topic_id"),
                                  part["difficulty"], used_ids)
             if row is None:
-                # Try swap: release one already-filled part of same q (different label)
                 swapped = False
                 for (fq, fl), frow in list(filled.items()):
                     if fq == q_no and fl != part_label:
@@ -231,7 +217,6 @@ def generate_paper(blueprint: dict, seed: int, conn) -> dict:
                             filled.pop((fq, fl))
                             used_ids.append(row2["q_id"])
                             filled[(q_no, part_label)] = {**row2, "part": part}
-                            # Re-fill the released slot
                             row_back = _pick_question(cursor, rng, subject_id,
                                                       q["unit_number"], filled.get((fq, fl), {}).get("topic_id") or part.get("topic_id"),
                                                       part["difficulty"], used_ids)
@@ -257,7 +242,6 @@ def generate_paper(blueprint: dict, seed: int, conn) -> dict:
             warnings.append(f"Attempt {attempt + 1} failed; retrying with new seed.")
             continue
 
-        # Assemble output in q_no / part_label order
         q_map: dict[int, list] = {}
         for (q_no, part_label), row in filled.items():
             q_map.setdefault(q_no, []).append({

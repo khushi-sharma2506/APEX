@@ -11,7 +11,6 @@ from database import migrate_db, DB_FILE
 from paper_engine import validate_blueprint, generate_paper
 
 
-# Fixture: in-memory DB seeded with sample subjective questions
 
 @pytest.fixture
 def conn():
@@ -37,7 +36,6 @@ def conn():
         INSERT INTO topics VALUES (4, 1, 2, 'Virtual Memory');
     """)
 
-    # Insert 10 SUBJECTIVE questions per (unit, difficulty) combo
     q_id = 1
     for unit in [1, 2]:
         for diff in ['Easy', 'Medium', 'Hard']:
@@ -77,7 +75,6 @@ def make_part(label, difficulty, topic_id=None):
     return {"part_label": label, "difficulty": difficulty, "topic_id": topic_id}
 
 
-# Test 1: attempt_k > offered_n → validation error
 
 def test_attempt_exceeds_offered(conn):
     q = make_q(1, 1, 2, 3, 5, [  # attempt_k=3 > offered_n=2
@@ -89,10 +86,8 @@ def test_attempt_exceeds_offered(conn):
     assert errors, f"Expected attempt>offered error, got: {issues}"
 
 
-# Test 2: Marks arithmetic
 
 def test_marks_arithmetic_pass(conn):
-    # 2 questions × attempt_k=2 × marks_per_part=5 = 20; target=20 → no marks error
     questions = [
         make_q(1, 1, 2, 2, 5, [make_part("a", "Easy"), make_part("b", "Medium")]),
         make_q(2, 2, 2, 2, 5, [make_part("a", "Easy"), make_part("b", "Medium")]),
@@ -103,17 +98,14 @@ def test_marks_arithmetic_pass(conn):
 
 
 def test_marks_arithmetic_fail(conn):
-    # Total = 10, target = 40 → error
     q = make_q(1, 1, 2, 2, 5, [make_part("a", "Easy"), make_part("b", "Medium")])
     issues = validate_blueprint(make_bp([q], target_marks=40), conn)
     errors = [i for i in issues if i["level"] == "error" and "target" in i["message"]]
     assert errors, f"Expected marks mismatch error: {issues}"
 
 
-# Test 3: Cross-part shortage detected with name
 
 def test_shortage_detected(conn):
-    # Request 50 Easy Unit-1 questions — bank only has 10
     parts = [make_part(chr(ord('a') + i), "Easy") for i in range(50)]
     q = make_q(1, 1, 50, 1, 5, parts)
     issues = validate_blueprint(make_bp([q]), conn)
@@ -122,7 +114,6 @@ def test_shortage_detected(conn):
     assert "10" in shortage[0]["message"] or "0" in shortage[0]["message"]
 
 
-# Test 4: No question used twice across 1000 seeded generations
 
 def test_no_repeats_across_seeds(conn):
     questions = [
@@ -136,7 +127,6 @@ def test_no_repeats_across_seeds(conn):
         assert len(all_ids) == len(set(all_ids)), f"Duplicate at seed {seed}: {all_ids}"
 
 
-# Test 5: Same seed gives same paper
 
 def test_same_seed_reproducible(conn):
     questions = [

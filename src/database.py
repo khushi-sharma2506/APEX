@@ -24,7 +24,6 @@ def migrate_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
-    # ── NEW: users table (auth) ───────────────────────────────────────────────
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +42,6 @@ def migrate_db():
         )
     """)
 
-    # ── Existing tables (unchanged, created by import_csv.py / init_db) ──────
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS subjects (
             subject_id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,7 +84,6 @@ def migrate_db():
         "CREATE INDEX IF NOT EXISTS idx_diff_topic ON questions(diff_level, topic_id)"
     )
 
-    # ── NEW: exams (teacher-created exam records) ─────────────────────────────
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS exams (
             exam_id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,13 +99,11 @@ def migrate_db():
             created_at       TEXT DEFAULT (datetime('now'))
         )
     """)
-    # Add columns safely if they don't exist yet
     try: cursor.execute("ALTER TABLE exams ADD COLUMN review_level TEXT DEFAULT 'score_and_correctness'")
     except sqlite3.OperationalError: pass
     try: cursor.execute("ALTER TABLE exams ADD COLUMN results_released_at DATETIME")
     except sqlite3.OperationalError: pass
 
-    # ── NEW: exam_topics (M2M: which topics an exam draws from) ──────────────
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS exam_topics (
             id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,7 +115,6 @@ def migrate_db():
         )
     """)
 
-    # ── student_sessions: keep existing rows, add new columns safely ──────────
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS student_sessions (
             session_id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,8 +128,6 @@ def migrate_db():
         )
     """)
 
-    # Add new columns to existing student_sessions rows (SQLite ALTER TABLE
-    # only supports ADD COLUMN; safe to run repeatedly — ignored if exists).
     for col_def in [
         ("exam_id",            "INTEGER"),
         ("current_difficulty", "TEXT DEFAULT 'Medium'"),
@@ -148,7 +140,6 @@ def migrate_db():
         except Exception:
             pass  # column already exists — skip
 
-    # ── NEW: session_responses (one row per answered question) ───────────────
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS session_responses (
             response_id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,13 +155,11 @@ def migrate_db():
         )
     """)
 
-    # Add window columns to exams safely if they don't exist
     try: cursor.execute("ALTER TABLE exams ADD COLUMN window_open TEXT")
     except sqlite3.OperationalError: pass
     try: cursor.execute("ALTER TABLE exams ADD COLUMN window_close TEXT")
     except sqlite3.OperationalError: pass
 
-    # ── NEW: blueprints (Written Paper) ──────────────────────────────────────
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS blueprints (
           blueprint_id  INTEGER PRIMARY KEY AUTOINCREMENT,
