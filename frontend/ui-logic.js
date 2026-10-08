@@ -36,7 +36,7 @@ function renderNav(){
 function go(v){
   view=v; $$('.view').forEach(s=>s.hidden = s.id!=='view-'+v); renderNav(); $('.main').scrollTop=0;
   v==='perf' ? perfStart() : perfStop();
-  if(v==='tdash') renderTDash(); if(v==='texams') renderTExams(); if(v==='results') renderResults();
+  if(v==='tdash') renderTDash(); if(v==='texams') renderTExams(); if(v==='results') renderResults(); if(v==='bank') renderBank(); if(v==='exams') renderExams();
 }
 function setRole(r){ role=r; go(NAV[r][0][0]); }
 $('#nav').addEventListener('click',e=>{const b=e.target.closest('[data-view]'); if(b) go(b.dataset.view)});
@@ -52,9 +52,13 @@ function enterApp(r,name){
 async function boot() {
   try {
     const me = await api.me();
-    enterApp(me.role, me.student_id ? me.student_id : (me.email || 'Admin'));
+    enterApp(me.role, me.username || (me.role === 'student' ? 'Student' : 'Teacher'));
   } catch(e) {
-    showLanding();
+    if (location.hash === '#login') {
+      showLogin('student', false);
+    } else {
+      showLanding(false);
+    }
   }
 }
 
@@ -63,8 +67,35 @@ async function logout(){
   try { await api.logout(); } catch(e){}
   $('#appShell').hidden=true; $('#login').hidden=true; $('#landing').hidden=false; $('#landing').scrollTop=0; toast('You have been signed out.');
 }
-function showLanding(){ $('#login').hidden=true; $('#landing').hidden=false; }
-function showLogin(r){ $('#landing').hidden=true; $('#login').hidden=false; setLTab(r||'student'); $('#lid').focus(); }
+function showLanding(push = true){
+  $('#login').hidden = true;
+  $('#landing').hidden = false;
+  if (push && location.hash === '#login') {
+    history.pushState(null, '', location.pathname + location.search);
+  }
+}
+
+function showLogin(r, push = true){
+  $('#landing').hidden = true;
+  $('#login').hidden = false;
+  setLTab(r || 'student');
+  $('#lid').focus();
+  if (push && location.hash !== '#login') {
+    history.pushState({ page: 'login' }, '', '#login');
+  }
+}
+
+window.addEventListener('popstate', () => {
+  if (!$('#appShell').hidden) return;
+  if (location.hash === '#login') {
+    $('#landing').hidden = true;
+    $('#login').hidden = false;
+    setLTab('student');
+  } else {
+    $('#login').hidden = true;
+    $('#landing').hidden = false;
+  }
+});
 $('#signout').onclick=logout;
 document.addEventListener('click',e=>{
   if(e.target.closest('[data-login]')) return showLogin('student');
@@ -132,8 +163,16 @@ $('#lForm').addEventListener('submit', async e=>{
   try {
     await api.login(id, pw);
     const me = await api.me();
+    if (lrole === 'student' && me.role !== 'student') {
+      try { await api.logout(); } catch(_) {}
+      throw new Error('Invalid enrollment number or password.');
+    }
+    if (lrole === 'teacher' && me.role !== 'teacher') {
+      try { await api.logout(); } catch(_) {}
+      throw new Error('Invalid staff email or password.');
+    }
     go1.disabled=false; go1.textContent='Sign in'; $('#lpw').value='';
-    enterApp(me.role, me.student_id ? me.student_id : (me.email || 'Admin'));
+    enterApp(me.role, me.username || (me.role === 'student' ? 'Student' : 'Teacher'));
   } catch(err) {
     go1.disabled=false; go1.textContent='Sign in';
     $('#lAlert').textContent = err.message || 'Login failed';
@@ -975,8 +1014,8 @@ function drawChart(){
 function perfStart(){ if(!P.sim) perfReset(); else perfPaint(); clearInterval(P.timer); P.timer=setInterval(()=>perfTick(false),1000) }
 function perfStop(){ clearInterval(P.timer) }
 function sw(id,on){const b=$(id); b.setAttribute('aria-checked',on)}
-$('#swCache').onclick=()=>{P.cfg.cache=.P.cfg.cache; sw('#swCache',P.cfg.cache); $('#swPre').disabled=.P.cfg.cache; perfReset()};
-$('#swPre').onclick=()=>{P.cfg.prefetch=.P.cfg.prefetch; sw('#swPre',P.cfg.prefetch); perfReset()};
+$('#swCache').onclick=()=>{P.cfg.cache=!P.cfg.cache; sw('#swCache',P.cfg.cache); $('#swPre').disabled=!P.cfg.cache; perfReset()};
+$('#swPre').onclick=()=>{P.cfg.prefetch=!P.cfg.prefetch; sw('#swPre',P.cfg.prefetch); perfReset()};
 $('#rgStud').oninput=e=>{P.cfg.students=+e.target.value; $('#rgStudV').textContent=e.target.value; perfReset()};
 $('#selCap').onchange=e=>{P.cfg.cap=+e.target.value; perfReset()};
 $('#runCmp').onclick=()=>{
