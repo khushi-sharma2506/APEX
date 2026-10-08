@@ -147,3 +147,33 @@ def test_missing_key_returns_none():
     cache.put(1, {"question": "A"})
 
     assert cache.get(2) is None, "Key 2 was never inserted"
+
+def test_capacity_one_eviction():
+    """A capacity-one cache should keep only the most recently inserted item."""
+    cache = LRUCache(capacity=1)
+
+    cache.put(1, {"question": "A"})
+    cache.put(2, {"question": "B"})
+
+    assert cache.get(1) is None, "Key 1 should be evicted"
+    assert cache.get(2) == {"question": "B"}
+    assert len(cache.cache) == 1
+
+
+def test_repeated_eviction_at_capacity_two():
+    """Repeated insertions should always evict the current least recently used item."""
+    cache = LRUCache(capacity=2)
+
+    cache.put(1, {"question": "A"})
+    cache.put(2, {"question": "B"})
+    cache.put(3, {"question": "C"})
+
+    assert cache.get(1) is None, "Key 1 should be evicted first"
+
+    cache.get(2)
+    cache.put(4, {"question": "D"})
+
+    assert cache.get(3) is None, "Key 3 should be evicted after key 2 is accessed"
+    assert cache.get(2) == {"question": "B"}
+    assert cache.get(4) == {"question": "D"}
+    assert len(cache.cache) == 2
