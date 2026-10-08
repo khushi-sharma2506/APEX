@@ -1,4 +1,4 @@
-const BASE = "http://127.0.0.1:8000";
+const BASE = (typeof window !== "undefined" && window.location.origin.startsWith("http")) ? "" : "http://127.0.0.1:8000";
 
 async function req(method, path, params = null, body = null) {
   let url = BASE + path;
