@@ -113,9 +113,11 @@ def require_admin(user: dict = Depends(get_current_user)):
 def get_me(user: dict = Depends(get_current_user)):
     return {"username": user["username"], "role": user["role"]}
 
+from fastapi.responses import RedirectResponse
+
 @app.get("/")
 def read_root():
-    return {"message": "APEX Assessment Engine API is Running!"}
+    return RedirectResponse(url="/ui/")
 
 @app.get("/subjects")
 def get_subjects(user: dict = Depends(get_current_user)):
@@ -233,13 +235,33 @@ def _normalize(text):
     import re
     return re.sub(r'\s+', ' ', text.strip().lower())
 
+COLUMN_ALIASES = {
+    'question': 'question_text', 'q_text': 'question_text', 'problem': 'question_text',
+    'difficulty': 'diff_level', 'diff': 'diff_level', 'level': 'diff_level',
+    'type': 'question_type', 'q_type': 'question_type',
+    'unit': 'unit_number', 'unit_no': 'unit_number',
+    'topic': 'topic_name', 'subject': 'subject_name',
+    'mark': 'marks', 'score': 'marks', 'points': 'marks',
+    'pyq': 'is_pyq', 'past_paper': 'is_pyq',
+    'option_a': 'opt_a', 'a': 'opt_a',
+    'option_b': 'opt_b', 'b': 'opt_b',
+    'option_c': 'opt_c', 'c': 'opt_c',
+    'option_d': 'opt_d', 'd': 'opt_d',
+    'answer': 'correct_opt', 'correct': 'correct_opt', 'correct_answer': 'correct_opt'
+}
+
 def _import_rows(rows):
     conn = get_db_connection()
     cursor = conn.cursor()
     imported, errors, skipped = 0, [], 0
-    for idx, row in enumerate(rows, 2):
+    for idx, raw_row in enumerate(rows, 2):
         try:
-            row = {k.strip(): v.strip() if isinstance(v, str) else v for k, v in row.items()}
+            row = {}
+            for k, v in raw_row.items():
+                if not k: continue
+                clean_k = k.strip().lower()
+                target_k = COLUMN_ALIASES.get(clean_k, clean_k)
+                row[target_k] = v.strip() if isinstance(v, str) else v
             qtext = row["question_text"]
             norm_qtext = _normalize(qtext)
             
@@ -381,6 +403,9 @@ class CreateExamRequest(BaseModel):
     review_level: str = "score_and_correctness"
     window_open: Optional[str] = None    # ISO datetime or None (open immediately)
     window_close: Optional[str] = None   # ISO datetime or None (never closes)
+    passkey: Optional[str] = None
+    target_batch: str = "All"
+    late_entry_mins: int = 15
     category: str = "Formal"
     max_attempts: int = 1
 
@@ -415,6 +440,20 @@ def list_exams(user: dict = Depends(get_current_user)):
             (ex["exam_id"],)
         ).fetchone()[0]
         ex["pending_marking"] = pending_mark
+        if user.get("role") == "student":
+            my_session = conn.execute(
+                """SELECT session_id, submitted_at, started_at FROM student_sessions 
+                   WHERE exam_id=? AND student_id=? 
+                   ORDER BY session_id DESC LIMIT 1""",
+                (ex["exam_id"], user["username"])
+            ).fetchone()
+            if my_session:
+                ex["my_session"] = dict(my_session)
+                ex["has_submitted"] = bool(my_session["submitted_at"])
+            else:
+                ex["my_session"] = None
+                ex["has_submitted"] = False
+
         if ex.get("results_released"):
             ex["computed_status"] = "released"
         elif pending_mark > 0:
@@ -436,22 +475,23 @@ def create_exam(req: CreateExamRequest, user: dict = Depends(require_teacher)):
     ids = [int(x.strip()) for x in req.topic_ids.split(",") if x.strip().isdigit()]
     if not ids:
         raise HTTPException(400, "At least one valid topic_id is required")
-    passkey = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    passkey = (req.passkey.strip().upper() if req.passkey and req.passkey.strip()
+               else ''.join(random.choices(string.ascii_uppercase + string.digits, k=6)))
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute(
-        """INSERT INTO exams(title, created_by, num_questions, duration_secs, mode, start_difficulty, results_released, review_level, window_open, window_close, passkey, category, max_attempts)
-           VALUES(?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO exams(title, created_by, num_questions, duration_secs, mode, start_difficulty, results_released, review_level, window_open, window_close, passkey, target_batch, late_entry_mins, category, max_attempts)
+           VALUES(?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (req.title, user["username"], req.num_questions, req.duration_secs,
          req.mode, req.start_difficulty, req.review_level,
-         req.window_open, req.window_close, passkey, req.category, req.max_attempts)
+         req.window_open, req.window_close, passkey, req.target_batch, req.late_entry_mins, req.category, req.max_attempts)
     )
     exam_id = cursor.lastrowid
     for tid in ids:
         cursor.execute("INSERT OR IGNORE INTO exam_topics(exam_id, topic_id) VALUES(?, ?)", (exam_id, tid))
     conn.commit()
     conn.close()
-    return {"exam_id": exam_id, "title": req.title}
+    return {"exam_id": exam_id, "title": req.title, "passkey": passkey}
 
 class ReleaseExamRequest(BaseModel):
     released: bool
@@ -478,6 +518,46 @@ def toggle_results(exam_id: int, req: ReleaseExamRequest, user: dict = Depends(r
     conn.commit()
     conn.close()
     return {"exam_id": exam_id, "results_released": req.released, "review_level": level}
+
+class EditExamRequest(BaseModel):
+    title: str
+    window_open: Optional[str] = None
+    window_close: Optional[str] = None
+    late_entry_mins: Optional[int] = 15
+    passkey: Optional[str] = None
+
+@app.put("/exams/{exam_id}")
+def update_exam(exam_id: int, req: EditExamRequest, user: dict = Depends(require_teacher)):
+    conn = get_db_connection()
+    exam = conn.execute("SELECT * FROM exams WHERE exam_id=?", (exam_id,)).fetchone()
+    if not exam:
+        conn.close()
+        raise HTTPException(404, "Exam not found")
+    
+    if req.window_open and req.window_close:
+        if req.window_close <= req.window_open:
+            conn.close()
+            raise HTTPException(400, "Window close time must be after window open time.")
+        try:
+            from datetime import datetime
+            dt_open = datetime.fromisoformat(req.window_open)
+            dt_close = datetime.fromisoformat(req.window_close)
+            window_mins = (dt_close - dt_open).total_seconds() / 60
+            if req.late_entry_mins and req.late_entry_mins > window_mins:
+                conn.close()
+                raise HTTPException(400, f"Late entry cutoff ({req.late_entry_mins}m) cannot exceed the total window duration ({int(window_mins)}m).")
+        except Exception:
+            pass
+
+    pk = req.passkey.strip().upper() if req.passkey and req.passkey.strip() else exam["passkey"]
+    conn.execute(
+        """UPDATE exams SET title=?, window_open=?, window_close=?, late_entry_mins=?, passkey=?
+           WHERE exam_id=?""",
+        (req.title.strip(), req.window_open, req.window_close, req.late_entry_mins, pk, exam_id)
+    )
+    conn.commit()
+    conn.close()
+    return {"status": "updated", "exam_id": exam_id}
 
 @app.delete("/exams/{exam_id}")
 def delete_exam(exam_id: int, user: dict = Depends(require_teacher)):
@@ -579,6 +659,8 @@ def _pick_question_safe(cursor, topic_ids: list[int], target_diff: str, seen_ids
 class StartSessionRequest(BaseModel):
     exam_id: int
     student_id: str
+    passkey: Optional[str] = None
+    is_preview: bool = False
 
 @app.post("/start_session")
 def start_session(req: StartSessionRequest):
@@ -589,11 +671,61 @@ def start_session(req: StartSessionRequest):
         raise HTTPException(404, "Exam not found")
     exam = dict(exam)
 
+    # If it's a teacher preview mode, bypass restrictions
+    if not req.is_preview:
+        # Check if student already submitted this exam and block re-attempts
+        max_attempts = exam.get("max_attempts") or 1
+        existing_attempts = conn.execute(
+            "SELECT COUNT(*) FROM student_sessions WHERE student_id=? AND exam_id=? AND submitted_at IS NOT NULL",
+            (req.student_id, req.exam_id)
+        ).fetchone()[0]
+        if existing_attempts >= max_attempts:
+            conn.close()
+            raise HTTPException(403, "You have already submitted this exam. Re-attempts are not allowed.")
+
+        # Check passkey (restored)
+        if exam.get("target_batch") == "PasskeyOnly" or req.passkey:
+            if not req.passkey or req.passkey.strip().upper() != (exam.get("passkey") or "").upper():
+                conn.close()
+                raise HTTPException(403, "Invalid Room PIN / Passkey.")
+
+        import datetime
+        now = datetime.datetime.now()
+
+        # Check Window Open
+        if exam.get("window_open"):
+            try:
+                # support ISO string formats
+                w_open = datetime.datetime.fromisoformat(exam["window_open"].replace('Z', ''))
+                if now < w_open:
+                    conn.close()
+                    raise HTTPException(403, f"Exam has not opened yet. Scheduled start: {exam['window_open']}")
+                
+                # Check 15-min Late Entry Cutoff
+                late_mins = exam.get("late_entry_mins") if exam.get("late_entry_mins") is not None else 15
+                if late_mins > 0:
+                    cutoff = w_open + datetime.timedelta(minutes=late_mins)
+                    if now > cutoff:
+                        conn.close()
+                        raise HTTPException(403, f"Entry closed. Students are only allowed to enter within the first {late_mins} minutes.")
+            except ValueError:
+                pass
+
+        # Check Window Close
+        if exam.get("window_close"):
+            try:
+                w_close = datetime.datetime.fromisoformat(exam["window_close"].replace('Z', ''))
+                if now > w_close:
+                    conn.close()
+                    raise HTTPException(403, "Exam window is closed. No new attempts are permitted.")
+            except ValueError:
+                pass
+
     cursor = conn.cursor()
     cursor.execute(
         """INSERT INTO student_sessions
-               (student_id, exam_id, current_difficulty, current_score, questions_seen)
-           VALUES (?, ?, ?, 0, '')""",
+               (student_id, exam_id, current_difficulty, current_score, questions_seen, started_at)
+           VALUES (?, ?, ?, 0, '', datetime('now'))""",
         (req.student_id, req.exam_id, exam["start_difficulty"])
     )
     session_id = cursor.lastrowid
@@ -827,7 +959,7 @@ def get_results(session_id: int, student_id: str):
     responses = conn.execute(
         """SELECT sr.q_id, sr.chosen_opt, sr.is_correct, sr.marks_awarded,
                   q.marks, q.question_text, q.question_type, t.topic_name,
-                  mo.correct_opt
+                  mo.opt_a, mo.opt_b, mo.opt_c, mo.opt_d, mo.correct_opt
            FROM session_responses sr
            JOIN questions q ON sr.q_id = q.q_id
            JOIN topics    t ON q.topic_id = t.topic_id
@@ -864,19 +996,120 @@ def get_results(session_id: int, student_id: str):
             item = {
                 "q_id": r["q_id"],
                 "topic_name": r["topic_name"],
+                "question_text": r["question_text"],
+                "chosen_opt": r["chosen_opt"],
                 "marks_awarded": r["marks_awarded"],
                 "marks": r["marks"],
-                "is_correct": bool(r["is_correct"])
+                "is_correct": bool(r["is_correct"]),
+                "opt_a": r["opt_a"],
+                "opt_b": r["opt_b"],
+                "opt_c": r["opt_c"],
+                "opt_d": r["opt_d"]
             }
             if review_level == "full_review":
-                item["question_text"] = r["question_text"]
-                item["chosen_opt"] = r["chosen_opt"]
                 item["correct_opt"] = r["correct_opt"]
             redacted_responses.append(item)
         res["responses"] = redacted_responses
 
     conn.close()
     return res
+
+@app.get("/exams/{exam_id}/submissions")
+def get_exam_submissions(exam_id: int, user: dict = Depends(require_teacher)):
+    conn = get_db_connection()
+    exam = conn.execute("SELECT * FROM exams WHERE exam_id=?", (exam_id,)).fetchone()
+    if not exam:
+        conn.close()
+        raise HTTPException(404, "Exam not found")
+    
+    rows = conn.execute("""
+        SELECT ss.session_id, ss.student_id, ss.started_at, ss.submitted_at,
+               COALESCE(SUM(sr.marks_awarded), 0) AS total_score,
+               COUNT(sr.response_id) AS total_answered,
+               SUM(CASE WHEN sr.is_correct = 1 THEN 1 ELSE 0 END) AS correct_answers
+        FROM student_sessions ss
+        LEFT JOIN session_responses sr ON ss.session_id = sr.session_id
+        WHERE ss.exam_id = ? AND ss.student_id != 'teacher_preview'
+        GROUP BY ss.session_id
+        ORDER BY ss.submitted_at DESC, ss.started_at DESC
+    """, (exam_id,)).fetchall()
+    
+    conn.close()
+    return {
+        "exam_id": exam_id,
+        "title": exam["title"],
+        "submissions": [dict(r) for r in rows]
+    }
+
+@app.get("/session/{session_id}/review")
+def teacher_session_review(session_id: int, user: dict = Depends(require_teacher)):
+    conn = get_db_connection()
+    s = conn.execute("SELECT * FROM student_sessions WHERE session_id=?", (session_id,)).fetchone()
+    if not s:
+        conn.close()
+        raise HTTPException(404, "Session not found")
+    exam = conn.execute("SELECT title FROM exams WHERE exam_id=?", (s["exam_id"],)).fetchone()
+
+    responses = conn.execute("""
+        SELECT sr.q_id, sr.chosen_opt, sr.is_correct, sr.marks_awarded,
+               q.marks, q.question_text, q.diff_level, t.topic_name,
+               mo.opt_a, mo.opt_b, mo.opt_c, mo.opt_d, mo.correct_opt
+        FROM session_responses sr
+        JOIN questions q ON sr.q_id = q.q_id
+        JOIN topics t ON q.topic_id = t.topic_id
+        LEFT JOIN mcq_options mo ON q.q_id = mo.q_id
+        WHERE sr.session_id = ?
+        ORDER BY sr.response_id ASC
+    """, (session_id,)).fetchall()
+    conn.close()
+
+    total_marks = sum(r["marks_awarded"] or 0 for r in responses)
+    max_marks = sum(r["marks"] or 0 for r in responses)
+
+    return {
+        "session_id": session_id,
+        "student_id": s["student_id"],
+        "exam_title": exam["title"] if exam else "Exam",
+        "total_marks": total_marks,
+        "max_marks": max_marks,
+        "submitted_at": s["submitted_at"],
+        "responses": [dict(r) for r in responses]
+    }
+
+@app.get("/exams/{exam_id}/export")
+def export_exam_csv(exam_id: int, user: dict = Depends(require_teacher)):
+    conn = get_db_connection()
+    exam = conn.execute("SELECT * FROM exams WHERE exam_id=?", (exam_id,)).fetchone()
+    if not exam:
+        conn.close()
+        raise HTTPException(404, "Exam not found")
+    
+    rows = conn.execute("""
+        SELECT ss.student_id,
+               COALESCE(SUM(sr.marks_awarded), 0) AS total_score,
+               COUNT(sr.response_id) AS total_answered,
+               SUM(CASE WHEN sr.is_correct = 1 THEN 1 ELSE 0 END) AS correct_answers,
+               ss.started_at, ss.submitted_at
+        FROM student_sessions ss
+        LEFT JOIN session_responses sr ON ss.session_id = sr.session_id
+        WHERE ss.exam_id = ? AND ss.student_id != 'teacher_preview'
+        GROUP BY ss.session_id
+        ORDER BY total_score DESC
+    """, (exam_id,)).fetchall()
+    conn.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Student ID", "Total Score", "Answered", "Correct Answers", "Started At", "Submitted At"])
+    for r in rows:
+        writer.writerow([r["student_id"], r["total_score"], r["total_answered"], r["correct_answers"], r["started_at"], r["submitted_at"] or "In Progress"])
+    
+    output.seek(0)
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename=exam_{exam_id}_results.csv"}
+    )
 
 @app.get("/cache/stats")
 def cache_stats():
@@ -1152,6 +1385,159 @@ def fix_question_key(q_id: int, req: FixKeyReq, user: dict = Depends(require_tea
     conn.close()
     
     return {"status": "success", "updated_sessions": len(updated_sessions)}
+
+
+
+class UpdateSubjectReq(BaseModel):
+    subject_name: str
+
+class QuestionReq(BaseModel):
+    subject_id: int
+    unit_number: int = 1
+    topic_name: str
+    question_text: str
+    question_type: str = "MCQ"
+    marks: int = 1
+    diff_level: str = "Medium"
+    is_pyq: int = 0
+    opt_a: Optional[str] = None
+    opt_b: Optional[str] = None
+    opt_c: Optional[str] = None
+    opt_d: Optional[str] = None
+    correct_opt: Optional[str] = None
+
+@app.put("/subjects/{sub_id}")
+def update_subject(sub_id: int, req: UpdateSubjectReq, user: dict = Depends(require_teacher)):
+    conn = get_db_connection()
+    sub = conn.execute("SELECT * FROM subjects WHERE subject_id=?", (sub_id,)).fetchone()
+    if not sub:
+        conn.close()
+        raise HTTPException(404, "Subject not found")
+    if sub["is_private"] and sub["owner"] != user["username"]:
+        conn.close()
+        raise HTTPException(403, "Not allowed to edit this pool")
+    conn.execute("UPDATE subjects SET subject_name=? WHERE subject_id=?", (req.subject_name.strip(), sub_id))
+    conn.commit()
+    conn.close()
+    return {"status": "updated", "subject_id": sub_id, "subject_name": req.subject_name}
+
+@app.delete("/subjects/{sub_id}")
+def delete_subject(sub_id: int, user: dict = Depends(require_teacher)):
+    conn = get_db_connection()
+    sub = conn.execute("SELECT * FROM subjects WHERE subject_id=?", (sub_id,)).fetchone()
+    if not sub:
+        conn.close()
+        raise HTTPException(404, "Subject not found")
+    if sub["is_private"] and sub["owner"] != user["username"]:
+        conn.close()
+        raise HTTPException(403, "Not allowed to delete this pool")
+    topics = conn.execute("SELECT topic_id FROM topics WHERE subject_id=?", (sub_id,)).fetchall()
+    t_ids = [t["topic_id"] for t in topics]
+    if t_ids:
+        placeholders = ",".join("?" * len(t_ids))
+        q_rows = conn.execute(f"SELECT q_id FROM questions WHERE topic_id IN ({placeholders})", t_ids).fetchall()
+        q_ids = [q["q_id"] for q in q_rows]
+        if q_ids:
+            q_ph = ",".join("?" * len(q_ids))
+            conn.execute(f"DELETE FROM mcq_options WHERE q_id IN ({q_ph})", q_ids)
+            conn.execute(f"DELETE FROM questions WHERE q_id IN ({q_ph})", q_ids)
+        conn.execute(f"DELETE FROM topics WHERE subject_id=?", (sub_id,))
+    conn.execute("DELETE FROM blueprints WHERE subject_id=?", (sub_id,))
+    conn.execute("DELETE FROM subjects WHERE subject_id=?", (sub_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "deleted", "subject_id": sub_id}
+
+@app.post("/questions")
+def create_question_endpoint(req: QuestionReq, user: dict = Depends(require_teacher)):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    t = cursor.execute("SELECT topic_id FROM topics WHERE subject_id=? AND unit_number=? AND LOWER(topic_name)=LOWER(?)",
+                       (req.subject_id, req.unit_number, req.topic_name.strip())).fetchone()
+    if t:
+        topic_id = t["topic_id"]
+    else:
+        cursor.execute("INSERT INTO topics(subject_id, unit_number, topic_name) VALUES (?, ?, ?)",
+                       (req.subject_id, req.unit_number, req.topic_name.strip()))
+        topic_id = cursor.lastrowid
+    
+    cursor.execute("""
+        INSERT INTO questions (topic_id, question_text, question_type, marks, diff_level, is_pyq)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (topic_id, req.question_text.strip(), req.question_type.upper(), req.marks, req.diff_level, req.is_pyq))
+    q_id = cursor.lastrowid
+
+    if req.question_type.upper() == "MCQ":
+        cursor.execute("""
+            INSERT INTO mcq_options (q_id, opt_a, opt_b, opt_c, opt_d, correct_opt)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (q_id, req.opt_a or "", req.opt_b or "", req.opt_c or "", req.opt_d or "", (req.correct_opt or "A").upper()))
+    
+    conn.commit()
+    conn.close()
+    return {"status": "created", "q_id": q_id}
+
+@app.put("/questions/{q_id}")
+def update_question_endpoint(q_id: int, req: QuestionReq, user: dict = Depends(require_teacher)):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    q = cursor.execute("SELECT * FROM questions WHERE q_id=?", (q_id,)).fetchone()
+    if not q:
+        conn.close()
+        raise HTTPException(404, "Question not found")
+    
+    t = cursor.execute("SELECT topic_id FROM topics WHERE subject_id=? AND unit_number=? AND LOWER(topic_name)=LOWER(?)",
+                       (req.subject_id, req.unit_number, req.topic_name.strip())).fetchone()
+    if t:
+        topic_id = t["topic_id"]
+    else:
+        cursor.execute("INSERT INTO topics(subject_id, unit_number, topic_name) VALUES (?, ?, ?)",
+                       (req.subject_id, req.unit_number, req.topic_name.strip()))
+        topic_id = cursor.lastrowid
+    
+    cursor.execute("""
+        UPDATE questions SET topic_id=?, question_text=?, question_type=?, marks=?, diff_level=?, is_pyq=?
+        WHERE q_id=?
+    """, (topic_id, req.question_text.strip(), req.question_type.upper(), req.marks, req.diff_level, req.is_pyq, q_id))
+
+    if req.question_type.upper() == "MCQ":
+        opt = cursor.execute("SELECT * FROM mcq_options WHERE q_id=?", (q_id,)).fetchone()
+        if opt:
+            cursor.execute("""
+                UPDATE mcq_options SET opt_a=?, opt_b=?, opt_c=?, opt_d=?, correct_opt=?
+                WHERE q_id=?
+            """, (req.opt_a or "", req.opt_b or "", req.opt_c or "", req.opt_d or "", (req.correct_opt or "A").upper(), q_id))
+        else:
+            cursor.execute("""
+                INSERT INTO mcq_options (q_id, opt_a, opt_b, opt_c, opt_d, correct_opt)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (q_id, req.opt_a or "", req.opt_b or "", req.opt_c or "", req.opt_d or "", (req.correct_opt or "A").upper()))
+    else:
+        cursor.execute("DELETE FROM mcq_options WHERE q_id=?", (q_id,))
+    
+    conn.commit()
+    conn.close()
+    return {"status": "updated", "q_id": q_id}
+
+
+
+@app.post("/reset_default_bank")
+def reset_default_bank(subject_name: Optional[str] = None, user: dict = Depends(require_teacher)):
+    csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "questions_bank.csv")
+    if not os.path.exists(csv_path):
+        raise HTTPException(404, "Default questions_bank.csv file not found on server.")
+    with open(csv_path, "r", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+    if subject_name and subject_name.strip() and subject_name.lower() != "all":
+        rows = [r for r in rows if r.get("subject_name", "").strip().lower() == subject_name.strip().lower()]
+    result = _import_rows(rows)
+    return {
+        "status": "success",
+        "imported": result["imported"],
+        "skipped": result["skipped"],
+        "message": f"Bank synchronized: {result['imported']} restored, {result['skipped']} existing questions kept."
+    }
 
 
 if os.path.isdir(_frontend):

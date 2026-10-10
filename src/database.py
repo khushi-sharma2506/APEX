@@ -159,6 +159,12 @@ def migrate_db():
     except sqlite3.OperationalError: pass
     try: cursor.execute("ALTER TABLE exams ADD COLUMN window_close TEXT")
     except sqlite3.OperationalError: pass
+    try: cursor.execute("ALTER TABLE exams ADD COLUMN target_batch TEXT DEFAULT 'All'")
+    except sqlite3.OperationalError: pass
+    try: cursor.execute("ALTER TABLE exams ADD COLUMN late_entry_mins INTEGER DEFAULT 15")
+    except sqlite3.OperationalError: pass
+    try: cursor.execute("ALTER TABLE student_sessions ADD COLUMN started_at TEXT")
+    except sqlite3.OperationalError: pass
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS blueprints (
