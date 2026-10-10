@@ -12,6 +12,70 @@ const ic = {
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let toastT; function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,3200)}
 
+/* custom UI modals (replaces browser confirm/prompt) */
+function uiConfirm({ title = "Confirm", message = "Are you sure?", okText = "Confirm", isDanger = false }) {
+  return new Promise(resolve => {
+    const dlg = $('#dlgConfirm');
+    $('#confirmTitle').textContent = title;
+    $('#confirmMsg').textContent = message;
+    const ok = $('#confirmOk');
+    ok.textContent = okText;
+    ok.className = isDanger ? 'btn danger' : 'btn primary';
+    if (isDanger) ok.style.color = 'var(--bad)'; else ok.style.color = '';
+    
+    const onOk = () => { cleanup(); dlg.close(); resolve(true); };
+    const onCancel = () => { cleanup(); dlg.close(); resolve(false); };
+    const cleanup = () => {
+      ok.removeEventListener('click', onOk);
+      $('#confirmCancel').removeEventListener('click', onCancel);
+    };
+    
+    ok.addEventListener('click', onOk);
+    $('#confirmCancel').addEventListener('click', onCancel);
+    dlg.showModal();
+  });
+}
+
+function uiPrompt({ title = "Input", message = "Please enter:", placeholder = "", defaultValue = "", okText = "Save" }) {
+  return new Promise(resolve => {
+    const dlg = $('#dlgPrompt');
+    $('#promptTitle').textContent = title;
+    $('#promptMsg').textContent = message;
+    const input = $('#promptInput');
+    input.placeholder = placeholder;
+    input.value = defaultValue;
+    $('#promptErr').style.display = 'none';
+    const ok = $('#promptOk');
+    ok.textContent = okText;
+    
+    const onOk = () => {
+      const val = input.value.trim();
+      if (!val) {
+        $('#promptErr').textContent = "This field cannot be empty.";
+        $('#promptErr').style.display = "block";
+        return;
+      }
+      cleanup();
+      dlg.close();
+      resolve(val);
+    };
+    const onCancel = () => { cleanup(); dlg.close(); resolve(null); };
+    const onKey = (e) => { if (e.key === 'Enter') onOk(); };
+    const cleanup = () => {
+      ok.removeEventListener('click', onOk);
+      $('#promptCancel').removeEventListener('click', onCancel);
+      input.removeEventListener('keydown', onKey);
+    };
+    
+    ok.addEventListener('click', onOk);
+    $('#promptCancel').addEventListener('click', onCancel);
+    input.addEventListener('keydown', onKey);
+    dlg.showModal();
+    setTimeout(() => input.focus(), 50);
+  });
+}
+
+
 document.documentElement.classList.add('js');
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 ic.home='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11 12 3l9 8M5 10v10h14V10"/></svg>';
@@ -36,7 +100,7 @@ function renderNav(){
 function go(v){
   view=v; $$('.view').forEach(s=>s.hidden = s.id!=='view-'+v); renderNav(); $('.main').scrollTop=0;
   v==='perf' ? perfStart() : perfStop();
-  if(v==='tdash') renderTDash(); if(v==='texams') renderTExams(); if(v==='results') renderResults(); if(v==='bank') renderBank(); if(v==='exams') renderExams();
+  if(v==='tdash') renderTDash(); if(v==='texams') renderTExams(); if(v==='results') renderResults(); if(v==='bank') { loadBankSubjects(); renderBank(); } if(v==='exams') renderExams();
 }
 function setRole(r){ role=r; go(NAV[r][0][0]); }
 $('#nav').addEventListener('click',e=>{const b=e.target.closest('[data-view]'); if(b) go(b.dataset.view)});
@@ -180,84 +244,327 @@ $('#lForm').addEventListener('submit', async e=>{
   }
 });
 
-const EXAMS = [
-  {id:1,title:'Mixed practice quiz',sub:'Operating Systems and DBMS',mode:'Adaptive',q:8,min:10,when:'Open until 5 Oct, 6:00 pm',status:'open'},
-  {id:2,title:'DBMS unit 3 test',sub:'Database Management Systems',mode:'Fixed paper',q:15,min:45,when:'Opens 3 Oct, 10:00 am',status:'upcoming'},
-  {id:3,title:'OS unit 1 practice',sub:'Operating Systems',mode:'Adaptive',q:5,min:10,when:'Taken on 24 Sep',status:'done',level:'score_and_correctness'},
-  {id:4,title:'DBMS unit 2 quiz',sub:'Database Management Systems',mode:'Adaptive',q:5,min:10,when:'Taken on 17 Sep',status:'pending',level:'score_and_correctness'}
+let _studentExams = [];
+let pendingStartExam = null;
 
-];
-function renderExams(){
-  $('#examList').innerHTML = EXAMS.map(e=>{
-    let a='';
-    if(e.status==='open') a=`<button class="btn primary" data-start="${e.id}">Start exam</button>`;
-    else if(e.status==='upcoming') a=`<span class="badge">Not open yet</span>`;
-    else if(e.status==='done') a=`<span class="score num">${score(e.title)}</span><button class="btn" data-review="${e.id}">View review</button>`;
-    else a=`<span class="badge warn">Submitted</span><span class="sub">Result not released yet</span>`;
-    return `<div class="exam-row"><div><h3>${esc(e.title)}</h3><div class="meta"><span class="badge ${e.mode==='Adaptive'?'brand':''}">${e.mode}</span><span>${esc(e.sub)}</span><span>${e.q} questions</span><span>${e.min} minutes</span></div><div class="meta" style="margin-top:4px"><span>${e.when}</span></div></div><div class="act">${a}</div></div>`;
+async function loadStudentExams() {
+  try {
+    _studentExams = await api.listExams();
+  } catch(e) {
+    _studentExams = [];
+  }
+}
+
+async function renderExams() {
+  await loadStudentExams();
+  const list = $('#examList');
+  if (!_studentExams.length) {
+    list.innerHTML = '<div class="empty">No exams assigned to you right now.</div>';
+    return;
+  }
+  
+  const now = new Date();
+  list.innerHTML = _studentExams.map(e => {
+    const isPasskeyOnly = e.target_batch === 'PasskeyOnly';
+    if (isPasskeyOnly) return ''; // private room, joined via room code only
+
+    let statusHtml = '';
+    let isAllowedToStart = true;
+    let lateMins = e.late_entry_mins != null ? e.late_entry_mins : 15;
+    let openDate = e.window_open ? new Date(e.window_open) : null;
+    let closeDate = e.window_close ? new Date(e.window_close) : null;
+
+    if (e.has_submitted) {
+      isAllowedToStart = false;
+      const released = e.results_released || e.computed_status === 'released';
+      statusHtml = `
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          <span class="badge ok">✓ Submitted</span>
+          ${released ? `<button class="btn" data-act="view-my-result" data-session="${e.my_session?.session_id}">View result</button>` : `<span class="sub" style="font-size:12px">Results pending</span>`}
+        </div>
+      `;
+    } else if (openDate && now < openDate) {
+      isAllowedToStart = false;
+      statusHtml = `<span class="badge" title="Opens at ${openDate.toLocaleTimeString()}">Opens ${openDate.toLocaleDateString()} ${openDate.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>`;
+    } else if (openDate && lateMins > 0 && now > new Date(openDate.getTime() + lateMins * 60000)) {
+      isAllowedToStart = false;
+      statusHtml = `<span class="badge bad" title="Late cutoff passed">Entry Closed (Late &gt; ${lateMins}m)</span>`;
+    } else if (closeDate && now > closeDate) {
+      isAllowedToStart = false;
+      statusHtml = `<span class="badge bad">Exam Closed</span>`;
+    } else {
+      statusHtml = `<button class="btn primary" data-start="${e.exam_id}">Start exam</button>`;
+    }
+
+    const durMins = Math.round((e.duration_secs || 1800) / 60);
+    const subTitle = (e.topics && e.topics.length) ? e.topics[0].subject_name : 'Adaptive Assessment';
+
+    return `<div class="exam-row">
+      <div>
+        <h3>${esc(e.title)}</h3>
+        <div class="meta">
+          <span class="badge ${e.mode==='adaptive'?'brand':''}">${e.mode==='adaptive'?'Adaptive':'Fixed'}</span>
+          <span>${esc(subTitle)}</span>
+          <span>${e.num_questions} questions</span>
+          <span>${durMins} minutes</span>
+          ${lateMins ? `<span style="color:var(--muted)">• First ${lateMins}m entry</span>` : ''}
+        </div>
+        <div class="meta" style="margin-top:4px">
+          <span style="font-size:12px;color:var(--muted)">
+            Room #${e.exam_id} ${openDate ? `• Start: ${openDate.toLocaleDateString()} ${openDate.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}` : '• Open now'}
+          </span>
+        </div>
+      </div>
+      <div class="act">${statusHtml}</div>
+    </div>`;
   }).join('');
 }
-$('#examList').addEventListener('click',e=>{
-  const r=e.target.closest('[data-review]'); if(r) return openReview(r.dataset.review); const b=e.target.closest('[data-start]'); if(!b) return;
-  const ex=EXAMS.find(x=>x.id==b.dataset.start);
-  $('#startSub').textContent = `${ex.title}: ${ex.q} questions in ${ex.min} minutes.`;
+
+$('#examList').addEventListener('click', async e => {
+  const vr = e.target.closest('[data-act="view-my-result"]');
+  if (vr) {
+    const sId = +vr.dataset.session;
+    openReview(sId);
+    return;
+  }
+  const b = e.target.closest('[data-start]');
+  if (!b) return;
+  const examId = +b.dataset.start;
+  const exam = _studentExams.find(x => x.exam_id === examId);
+  if (!exam) return;
+  if (exam.has_submitted) {
+    toast('You have already submitted this exam. Re-attempts are not allowed.');
+    return;
+  }
+  pendingStartExam = { exam_id: examId, is_preview: false, passkey: exam.passkey };
+  $('#startSub').textContent = `${exam.title}: ${exam.num_questions} questions in ${Math.round((exam.duration_secs||1800)/60)} minutes.`;
   $('#startDlg').showModal();
 });
-$('#startCancel').onclick=()=>$('#startDlg').close();
-$('#startGo').onclick=()=>{$('#startDlg').close(); openExam(1)};
 
-function runChecks(){
-  const items=[
-    ['Browser', ()=> (CSS.supports('display','grid') && 'fetch' in window) ? ['ok','Your browser supports everything APEX needs.'] : ['bad','Use an up-to-date Chrome, Edge, Firefox or Safari.']],
-    ['Connection', ()=> navigator.onLine ? ['ok','You are online.'] : ['bad','You appear to be offline. Reconnect before you start.']],
-    ['Screen size', ()=> innerWidth>=1024 ? ['ok','Screen is large enough.'] : ['warn','Use a laptop or desktop screen at least 1024 px wide.']]
+function runChecks() {
+  const items = [
+    ['Browser', () => (CSS.supports('display','grid') && 'fetch' in window) ? ['ok','Your browser supports everything APEX needs.'] : ['bad','Use an up-to-date Chrome, Edge, Firefox or Safari.']],
+    ['Connection', () => navigator.onLine ? ['ok','You are online with active network connectivity.'] : ['bad','You appear to be offline. Reconnect before you start.']],
+    ['Screen size', () => innerWidth >= 1024 ? ['ok','Screen width is sufficient.'] : ['warn','Use a laptop or desktop screen at least 1024 px wide.']]
   ];
-  const box=$('#checks'); box.innerHTML = items.map(i=>`<div class="check"><span class="dot"></span><div><b>${i[0]}</b><div class="sub">Not checked yet</div></div></div>`).join('');
-  items.forEach((it,i)=>setTimeout(()=>{
-    const [s,m]=it[1](); const row=box.children[i]; row.querySelector('.dot').className='dot '+s; row.querySelector('.sub').textContent=m;
-  },350*(i+1)));
+  const box = $('#checks');
+  if (!box) return;
+  box.innerHTML = items.map(i => `<div class="check"><span class="dot"></span><div><b>${i[0]}</b><div class="sub">Not checked yet</div></div></div>`).join('');
+  items.forEach((it, i) => setTimeout(() => {
+    if (!box.children[i]) return;
+    const [s, m] = it[1]();
+    const row = box.children[i];
+    row.querySelector('.dot').className = 'dot ' + s;
+    row.querySelector('.sub').textContent = m;
+  }, 350 * (i + 1)));
 }
-$('#runCheck').onclick=runChecks;
+$('#runCheck')?.addEventListener('click', runChecks);
 
-const QS = [
-  {t:'Which scheduling algorithm is non-preemptive and serves processes strictly in order of arrival?', o:['Round Robin','First-Come First-Served (FCFS)','Shortest Remaining Time First','Preemptive priority']},
-  {t:'A page fault occurs when:', o:['The CPU is idle','The disk is full','The referenced page is not in main memory','The page is present in the cache']},
-  {t:'Which SQL clause filters individual rows before grouping?', o:['HAVING','ORDER BY','WHERE','GROUP BY']},
-  {t:'Logical data independence means the ability to change:', o:['The conceptual schema without changing external schemas or application programs','The disk hardware','The indexes only','The operating system']},
-  {t:'Which of the following is NOT a necessary condition for deadlock?', o:['Mutual exclusion','Hold and wait','Circular wait','Preemption']},
-  {t:'A foreign key constraint enforces:', o:['Entity integrity','Domain integrity','Referential integrity','Key uniqueness only']},
-  {t:'In demand paging, a valid-invalid bit set to invalid means the page is:', o:['Legal and in memory','Dirty','Locked in memory','Not in memory or not a legal page of the process']},
-  {t:'A schedule is conflict serializable if its precedence graph:', o:['Contains a cycle','Has no cycle','Is empty only','Is a complete graph']}
+// Join Room by Code & PIN
+$('#btnJoinRoom')?.addEventListener('click', async () => {
+  const rId = parseInt($('#joinRoomId')?.value);
+  const pin = $('#joinPin')?.value.trim().toUpperCase();
+  if (!rId) { toast('Please enter a valid Room ID number.'); return; }
+  try {
+    const sId = user ? user.name : 'student';
+    const sess = await api.startSession(rId, sId, pin, false);
+    toast(`Entered Room #${rId}! Starting exam...`);
+    startLiveExamSession(sess, false);
+  } catch(err) {
+    toast('Cannot join room: ' + err.message);
+  }
+});
 
-];
-let ex=null;
-const fmt=s=>String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');
-function openExam(){
-  ex={i:0,sel:null,left:600,done:false}; $('#exam').hidden=false; $('#exFoot').hidden=false; renderQ();
-  clearInterval(ex.t); ex.t=setInterval(()=>{ ex.left--; paintTimer(); if(ex.left<=0) finish(true); },1000);
+$('#startCancel').onclick = () => { $('#startDlg').close(); pendingStartExam = null; };
+$('#startGo').onclick = async () => {
+  $('#startDlg').close();
+  if (!pendingStartExam) return;
+  try {
+    const sId = user ? user.name : 'student';
+    const sess = await api.startSession(pendingStartExam.exam_id, sId, pendingStartExam.passkey, pendingStartExam.is_preview);
+    startLiveExamSession(sess, pendingStartExam.is_preview);
+  } catch(err) {
+    toast('Error starting exam: ' + err.message);
+  } finally {
+    pendingStartExam = null;
+  }
+};
+
+let ex = null;
+const fmt = s => String(Math.floor(s/60)).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+
+function paintTimer() {
+  const t = $('#exTimer');
+  if (!t || !ex) return;
+  t.textContent = fmt(Math.max(ex.left, 0));
+  t.classList.toggle('low', ex.left <= 120);
 }
-function paintTimer(){const t=$('#exTimer'); t.textContent=fmt(Math.max(ex.left,0)); t.classList.toggle('low',ex.left<=120)}
-function renderQ(){
-  const q=QS[ex.i]; ex.sel=null; paintTimer();
-  $('#exCount').textContent=`Question ${ex.i+1} of ${QS.length}`; $('#exBar').style.width=(ex.i/QS.length*100)+'%'; $('#exSave').textContent='';
-  $('#exBody').innerHTML=`<div class="sub">Multiple choice. Choose one answer.</div><h2 class="qtext">${esc(q.t)}</h2><div class="opts" role="radiogroup" aria-label="Answer options">${q.o.map((o,k)=>`<label class="opt"><input type="radio" name="o" value="${k}"><span class="key">${'ABCD'[k]}</span><span>${esc(o)}</span></label>`).join('')}</div>`;
-  $('#exNext').disabled=true; $('#exNext').textContent = ex.i===QS.length-1?'Submit exam':'Save and continue';
+
+async function startLiveExamSession(sess, isPreview = false) {
+  ex = {
+    sessionId: sess.session_id,
+    examId: sess.exam_id,
+    title: sess.exam_title,
+    numQ: sess.num_questions,
+    left: sess.duration_secs || 1800,
+    currentQ: null,
+    qIdx: 0,
+    isPreview: isPreview,
+    done: false
+  };
+  $('#exTitle').textContent = isPreview ? `[PREVIEW] ${sess.exam_title}` : sess.exam_title;
+  $('#exExit').textContent = isPreview ? 'Exit Preview' : 'Exit Exam';
+  $('#exam').hidden = false;
+  $('#exFoot').hidden = false;
+  paintTimer();
+
+  clearInterval(ex.t);
+  ex.t = setInterval(() => {
+    ex.left--;
+    paintTimer();
+    if (ex.left <= 0) finishExamSession(true);
+  }, 1000);
+
+  await loadNextQuestion();
 }
-function pick(k){
-  const labels=$$('#exBody .opt'); if(!labels[k]) return;
-  labels.forEach((l,i)=>{l.classList.toggle('sel',i===k); l.querySelector('input').checked=i===k});
-  ex.sel=k; $('#exNext').disabled=false; $('#exSave').textContent='Saving...'; setTimeout(()=>{ if(ex&&!ex.done) $('#exSave').textContent='Saved' },500);
+
+async function loadNextQuestion() {
+  if (!ex || ex.done) return;
+  try {
+    $('#exSave').textContent = 'Fetching question...';
+    const res = await api.nextQuestion(ex.sessionId);
+    if (!res || res.finished || !res.question) {
+      // No more questions -> finish exam
+      await finishExamSession(false);
+      return;
+    }
+    ex.currentQ = res.question;
+    ex.qIdx = res.question_number || (ex.qIdx + 1);
+    ex.numQ = res.total_questions || ex.numQ;
+    renderCurrentQuestion();
+  } catch(err) {
+    toast('Error loading question: ' + err.message);
+  }
 }
-$('#exBody').addEventListener('change',e=>{ if(e.target.name==='o') pick(+e.target.value) });
-$('#exNext').onclick=()=>{ if(ex.sel===null) return; ex.i++; ex.i>=QS.length ? finish(false) : renderQ(); };
-function finish(timeUp){
-  clearInterval(ex.t); ex.done=true; $('#exBar').style.width='100%'; $('#exFoot').hidden=true;
-  $('#exCount').textContent='Finished'; EXAMS[0].status='pending'; EXAMS[0].when='Submitted just now'; renderExams();
-  $('#exBody').innerHTML=`<div class="done"><div class="ring">${ic.ok.replace('<svg','<svg width="28" height="28"')}</div><h2 style="font-size:24px;letter-spacing:-.01em">${timeUp?'Time is up. Your answers were submitted.':'Exam submitted'}</h2><p class="sub" style="margin:8px 0 20px">Your answers are saved. Your teacher decides when results are released, so no score is shown yet.</p><button class="btn primary" id="backExams">Back to my exams</button></div>`;
+
+function renderCurrentQuestion() {
+  const q = ex.currentQ;
+  ex.sel = null;
+  paintTimer();
+  $('#exCount').textContent = `Question ${ex.qIdx} of ${ex.numQ}`;
+  $('#exBar').style.width = ((ex.qIdx - 1) / ex.numQ * 100) + '%';
+  $('#exSave').textContent = '';
+
+  const opts = [
+    { key: 'A', text: q.opt_a },
+    { key: 'B', text: q.opt_b },
+    { key: 'C', text: q.opt_c },
+    { key: 'D', text: q.opt_d }
+  ].filter(o => Boolean(o.text));
+
+  $('#exBody').innerHTML = `
+    <div class="sub">Multiple choice. Choose one answer.</div>
+    <h2 class="qtext">${esc(q.question_text)}</h2>
+    <div class="opts" role="radiogroup" aria-label="Answer options">
+      ${opts.map(o => `
+        <label class="opt">
+          <input type="radio" name="o" value="${o.key}">
+          <span class="key">${o.key}</span>
+          <span>${esc(o.text)}</span>
+        </label>
+      `).join('')}
+    </div>
+  `;
+  $('#exNext').disabled = true;
+  $('#exNext').textContent = ex.qIdx >= ex.numQ ? 'Submit exam' : 'Save and continue';
 }
-function closeExam(){ if(ex) clearInterval(ex.t); $('#exam').hidden=true; ex=null; }
-$('#exExit').onclick=closeExam;
-$('#exBody').addEventListener('click',e=>{ if(e.target.id==='backExams') closeExam() });
+
+function pick(k) {
+  const labels = $$('#exBody .opt');
+  if (!labels[k]) return;
+  labels.forEach((l, i) => {
+    l.classList.toggle('sel', i === k);
+    l.querySelector('input').checked = (i === k);
+  });
+  const optKeys = ['A', 'B', 'C', 'D'];
+  ex.sel = optKeys[k];
+  $('#exNext').disabled = false;
+  $('#exSave').textContent = 'Option selected';
+}
+
+$('#exBody').addEventListener('change', e => {
+  if (e.target.name === 'o') {
+    ex.sel = e.target.value;
+    $('#exNext').disabled = false;
+    $$('#exBody .opt').forEach(l => l.classList.toggle('sel', l.querySelector('input').checked));
+  }
+});
+
+$('#exNext').onclick = async () => {
+  if (!ex || !ex.sel) return;
+  const btn = $('#exNext');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    $('#exSave').textContent = 'Saving answer...';
+    await api.submitAnswer(ex.sessionId, ex.currentQ.q_id, ex.sel);
+    $('#exSave').textContent = 'Saved';
+    if (ex.qIdx >= ex.numQ) {
+      await finishExamSession(false);
+    } else {
+      await loadNextQuestion();
+    }
+  } catch(err) {
+    toast('Error submitting answer: ' + err.message);
+    btn.disabled = false;
+    btn.textContent = ex.qIdx >= ex.numQ ? 'Submit exam' : 'Save and continue';
+  }
+};
+
+async function finishExamSession(timeUp) {
+  if (!ex) return;
+  clearInterval(ex.t);
+  ex.done = true;
+  try {
+    await api.forceSubmit(ex.sessionId);
+  } catch(e) {}
+  $('#exBar').style.width = '100%';
+  $('#exFoot').hidden = true;
+  $('#exCount').textContent = 'Finished';
+  renderExams();
+  $('#exBody').innerHTML = `
+    <div class="done">
+      <div class="ring">${ic.ok.replace('<svg','<svg width="28" height="28"')}</div>
+      <h2 style="font-size:24px;letter-spacing:-.01em">${timeUp ? 'Time is up. Your answers were submitted.' : 'Exam submitted successfully!'}</h2>
+      <p class="sub" style="margin:8px 0 20px">${ex.isPreview ? 'Preview session complete. No student score recorded.' : 'Your answers are saved. Your teacher decides when results are released.'}</p>
+      <button class="btn primary" id="backExams">Back to my exams</button>
+    </div>
+  `;
+}
+
+async function closeExam() {
+  if (ex && !ex.done && !ex.isPreview) {
+    const ok = await uiConfirm({
+      title: "Exit & Submit Exam?",
+      message: "Are you sure you want to exit? Your exam will be submitted immediately with all currently saved answers.",
+      okText: "Submit & Exit",
+      isDanger: true
+    });
+    if (!ok) return;
+    try {
+      await api.forceSubmit(ex.sessionId);
+      toast('Exam submitted.');
+    } catch(e) {}
+  }
+  if (ex) clearInterval(ex.t);
+  $('#exam').hidden = true;
+  ex = null;
+  renderExams();
+}
+$('#exExit').onclick = closeExam;
+$('#exBody').addEventListener('click', e => {
+  if (e.target.id === 'backExams') closeExam();
+});
 document.addEventListener('keydown',e=>{
   if($('#exam').hidden||!ex||ex.done) return;
   const k={a:0,b:1,c:2,d:3,'1':0,'2':1,'3':2,'4':3}[e.key.toLowerCase()];
@@ -267,21 +574,284 @@ document.addEventListener('keydown',e=>{
 
 const dcls={Easy:'ok',Medium:'warn',Hard:'bad'};
 let BANK = [];
-async function renderBank(){
-  const q=$('#fq').value.trim(), s=$('#fs').value, d=$('#fd').value, t=$('#ft').value;
+let currentSubjects = [];
+
+async function loadBankSubjects() {
   try {
-    const res = await api.questions({ subject: s, topic: '', difficulty: d, qtype: t, limit: 500 });
-    const qlow = q.toLowerCase();
-    BANK = res.questions.filter(r => (!q || r.question_text.toLowerCase().includes(qlow)));
-    
-    $('#bankRows').innerHTML = BANK.length ? BANK.map(r=>`<tr><td><div class="clamp">${esc(r.question_text)}</div></td><td><span class="badge">${r.question_type==='MCQ'?'MCQ':'Subjective'}</span></td><td><span class="badge ${dcls[r.diff_level]}">${r.diff_level}</span></td><td class="num">${r.marks}</td><td class="sub">${esc(r.topic_name||'')}</td></tr>`).join('') : `<tr><td colspan="5"><div class="empty">No questions match these filters. Clear a filter to see more.</div></td></tr>`;
-    $('#bankCount').textContent = `${BANK.length} matching questions found`;
-  } catch(e) {
-    $('#bankRows').innerHTML = `<tr><td colspan="5"><div class="empty bad">Failed to load questions.</div></td></tr>`;
+    currentSubjects = await api.subjects();
+    const prev = $('#fs')?.value;
+    if ($('#fs')) {
+      $('#fs').innerHTML = '<option value="">All subjects</option>' + 
+        currentSubjects.map(s => `<option value="${s.subject_id}">${esc(s.subject_name)}${s.is_private ? ' (Private)' : ''}</option>`).join('');
+      if (prev) $('#fs').value = prev;
+    }
+    if ($('#qSub')) {
+      $('#qSub').innerHTML = currentSubjects.map(s => `<option value="${s.subject_id}">${esc(s.subject_name)}${s.is_private ? ' (Private)' : ''}</option>`).join('');
+    }
+  } catch (err) {
+    console.error("Failed to load subjects:", err);
   }
 }
-['#fq','#fs','#fd','#ft'].forEach(id=>$(id).addEventListener('change',renderBank));
-$('#fq').addEventListener('keyup', (e) => { if(e.key === 'Enter') renderBank() });
+
+async function renderBank(){
+  const q=$('#fq').value.trim(), s=$('#fs').value, d=$('#fd').value, t=$('#ft').value;
+  const params = { page_size: 500 };
+  if (s) params.subject_id = +s;
+  if (d) params.diff_level = d;
+  if (t) params.question_type = t;
+  if (q) params.search = q;
+
+  try {
+    const res = await api.questions(params);
+    BANK = res.questions || [];
+    
+    $('#bankRows').innerHTML = BANK.length ? BANK.map(r=>`<tr>
+      <td><div class="clamp">${esc(r.question_text)}</div></td>
+      <td><span class="badge">${r.question_type==='MCQ'?'MCQ':'Subjective'}</span></td>
+      <td><span class="badge ${dcls[r.diff_level] || ''}">${r.diff_level}</span></td>
+      <td class="num">${r.marks}</td>
+      <td class="sub">${esc(r.topic_name||'')}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn" style="padding:4px 8px;font-size:12px;margin-right:4px" data-qact="edit" data-id="${r.q_id}">Edit</button>
+        <button class="btn danger" style="padding:4px 8px;font-size:12px;color:var(--bad)" data-qact="del" data-id="${r.q_id}">Delete</button>
+      </td>
+    </tr>`).join('') : `<tr><td colspan="6"><div class="empty">No questions match these filters. Clear a filter or click "+ Add question".</div></td></tr>`;
+    $('#bankCount').textContent = `${BANK.length} matching questions found (out of ${res.total || BANK.length} total in database)`;
+  } catch(e) {
+    $('#bankRows').innerHTML = `<tr><td colspan="6"><div class="empty bad">Failed to load questions: ${esc(e.message)}</div></td></tr>`;
+  }
+}
+['#fq','#fs','#fd','#ft'].forEach(id=>$(id)?.addEventListener('change',renderBank));
+$('#fq')?.addEventListener('keyup', (e) => { if(e.key === 'Enter') renderBank() });
+
+$('#bankRows')?.addEventListener('click', async e => {
+  const b = e.target.closest('[data-qact]');
+  if (!b) return;
+  const id = +b.dataset.id;
+  const act = b.dataset.qact;
+  if (act === 'del') {
+    const ok = await uiConfirm({
+      title: "Delete Question?",
+      message: "Are you sure you want to remove this question from the question bank? This cannot be undone.",
+      okText: "Delete Question",
+      isDanger: true
+    });
+    if (!ok) return;
+    try {
+      await api.deleteQuestion(id);
+      toast("Question deleted successfully.");
+      renderBank();
+    } catch (err) {
+      toast("Error: " + err.message);
+    }
+  } else if (act === 'edit') {
+    openEditQuestion(id);
+  }
+});
+
+async function openAddQuestion() {
+  await loadBankSubjects();
+  $('#dlgQTitle').textContent = "Add Question";
+  $('#dlgQSub').textContent = "Add a question directly to the question bank or a private pool.";
+  $('#qEditId').value = "";
+  $('#qTopic').value = "";
+  $('#qText').value = "";
+  $('#qMarks').value = "1";
+  $('#qDiff').value = "Medium";
+  $('#qType').value = "MCQ";
+  $('#qPyq').checked = false;
+  $('#qOptA').value = "";
+  $('#qOptB').value = "";
+  $('#qOptC').value = "";
+  $('#qOptD').value = "";
+  $('#qCorrectOpt').value = "A";
+  $('#mcqFields').style.display = "block";
+  $('#qErr').style.display = "none";
+  if ($('#fs').value) $('#qSub').value = $('#fs').value;
+  $('#dlgQuestion').showModal();
+}
+
+async function openEditQuestion(id) {
+  try {
+    await loadBankSubjects();
+    const q = await api.questionById(id);
+    $('#dlgQTitle').textContent = "Edit Question";
+    $('#dlgQSub').textContent = "Update question text, difficulty, marks, or options.";
+    $('#qEditId').value = q.q_id;
+    $('#qSub').value = q.subject_id || (currentSubjects[0]?.subject_id || "");
+    $('#qUnit').value = q.unit_number || 1;
+    $('#qTopic').value = q.topic_name || "";
+    $('#qType').value = q.question_type || "MCQ";
+    $('#qMarks').value = q.marks || 1;
+    $('#qDiff').value = q.diff_level || "Medium";
+    $('#qPyq').checked = Boolean(q.is_pyq);
+    $('#qText').value = q.question_text || "";
+    $('#qOptA').value = q.opt_a || "";
+    $('#qOptB').value = q.opt_b || "";
+    $('#qOptC').value = q.opt_c || "";
+    $('#qOptD').value = q.opt_d || "";
+    $('#qCorrectOpt').value = q.correct_opt || "A";
+    $('#mcqFields').style.display = q.question_type === "MCQ" ? "block" : "none";
+    $('#qErr').style.display = "none";
+    $('#dlgQuestion').showModal();
+  } catch (err) {
+    toast("Failed to load question: " + err.message);
+  }
+}
+
+$('#openAddQ')?.addEventListener('click', openAddQuestion);
+$('#qCancel')?.addEventListener('click', () => $('#dlgQuestion').close());
+$('#qType')?.addEventListener('change', () => {
+  $('#mcqFields').style.display = $('#qType').value === 'MCQ' ? 'block' : 'none';
+});
+
+$('#qSaveBtn')?.addEventListener('click', async () => {
+  const text = $('#qText').value.trim();
+  const topic = $('#qTopic').value.trim();
+  const subId = +$('#qSub').value;
+  const unit = +$('#qUnit').value || 1;
+  const marks = +$('#qMarks').value || 1;
+  const diff = $('#qDiff').value;
+  const qtype = $('#qType').value;
+  const isPyq = $('#qPyq').checked ? 1 : 0;
+  const err = $('#qErr');
+
+  if (!text) {
+    err.textContent = "Please enter question text.";
+    err.style.display = "block";
+    return;
+  }
+  if (!topic) {
+    err.textContent = "Please enter a topic name.";
+    err.style.display = "block";
+    return;
+  }
+
+  const payload = {
+    subject_id: subId,
+    unit_number: unit,
+    topic_name: topic,
+    question_text: text,
+    question_type: qtype,
+    marks: marks,
+    diff_level: diff,
+    is_pyq: isPyq
+  };
+
+  if (qtype === "MCQ") {
+    const a = $('#qOptA').value.trim();
+    const b = $('#qOptB').value.trim();
+    const c = $('#qOptC').value.trim();
+    const d = $('#qOptD').value.trim();
+    if (!a || !b || !c || !d) {
+      err.textContent = "All 4 options (A, B, C, D) are required for MCQ.";
+      err.style.display = "block";
+      return;
+    }
+    payload.opt_a = a;
+    payload.opt_b = b;
+    payload.opt_c = c;
+    payload.opt_d = d;
+    payload.correct_opt = $('#qCorrectOpt').value;
+  }
+
+  const editId = $('#qEditId').value;
+  $('#qSaveBtn').disabled = true;
+  $('#qSaveBtn').textContent = "Saving...";
+  try {
+    if (editId) {
+      await api.updateQuestion(editId, payload);
+      toast("Question updated successfully.");
+    } else {
+      await api.createQuestion(payload);
+      toast("Question created successfully.");
+    }
+    $('#dlgQuestion').close();
+    renderBank();
+  } catch (e) {
+    err.textContent = e.message;
+    err.style.display = "block";
+  } finally {
+    $('#qSaveBtn').disabled = false;
+    $('#qSaveBtn').textContent = "Save question";
+  }
+});
+
+/* Manage Private Pools logic */
+$('#btnManagePools')?.addEventListener('click', async e => {
+  e.preventDefault();
+  try {
+    const subs = await api.subjects();
+    const priv = subs.filter(s => s.is_private);
+    const list = $('#poolsList');
+    if (!priv.length) {
+      list.innerHTML = `<div class="empty">No private pools found. Click "+ Add private pool" to create one.</div>`;
+    } else {
+      list.innerHTML = priv.map(p => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--sunken);border-radius:6px">
+          <div>
+            <b>${esc(p.subject_name)}</b>
+            <div class="sub" style="font-size:12px">Private pool • ID #${p.subject_id}</div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button class="btn" style="padding:4px 8px;font-size:12px" data-pact="edit" data-id="${p.subject_id}" data-name="${esc(p.subject_name)}">Rename</button>
+            <button class="btn danger" style="padding:4px 8px;font-size:12px;color:var(--bad)" data-pact="del" data-id="${p.subject_id}" data-name="${esc(p.subject_name)}">Delete</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    $('#dlgPools').showModal();
+  } catch (err) {
+    toast("Failed to load pools: " + err.message);
+  }
+});
+
+$('#closePools')?.addEventListener('click', () => $('#dlgPools').close());
+
+$('#poolsList')?.addEventListener('click', async e => {
+  const b = e.target.closest('[data-pact]');
+  if (!b) return;
+  const id = +b.dataset.id;
+  const act = b.dataset.pact;
+  const name = b.dataset.name;
+  if (act === 'del') {
+    const ok = await uiConfirm({
+      title: `Delete "${name}"?`,
+      message: `All questions and topics inside this private pool will be permanently deleted.`,
+      okText: "Delete Pool",
+      isDanger: true
+    });
+    if (!ok) return;
+    try {
+      await api.deleteSubject(id);
+      toast(`Pool "${name}" deleted.`);
+      await loadBankSubjects();
+      if (typeof initBlueprint === 'function') await initBlueprint();
+      renderBank();
+      $('#btnManagePools').click();
+    } catch (err) {
+      toast("Error: " + err.message);
+    }
+  } else if (act === 'edit') {
+    const newName = await uiPrompt({
+      title: "Rename Private Pool",
+      message: "Enter the updated name for this private pool:",
+      defaultValue: name,
+      okText: "Update Name"
+    });
+    if (!newName || newName === name) return;
+    try {
+      await api.updateSubject(id, { subject_name: newName.trim() });
+      toast("Pool renamed successfully.");
+      await loadBankSubjects();
+      if (typeof initBlueprint === 'function') await initBlueprint();
+      renderBank();
+      $('#btnManagePools').click();
+    } catch (err) {
+      toast("Error: " + err.message);
+    }
+  }
+});
 
 /* CSV import check (client side) */
 function parseCSV(text){
@@ -293,11 +863,28 @@ function parseCSV(text){
   }
   if(f.length||row.length){row.push(f);rows.push(row)} return rows;
 }
+const CSV_ALIASES = {
+  'question': 'question_text', 'q_text': 'question_text', 'problem': 'question_text',
+  'difficulty': 'diff_level', 'diff': 'diff_level', 'level': 'diff_level',
+  'type': 'question_type', 'q_type': 'question_type',
+  'unit': 'unit_number', 'unit_no': 'unit_number',
+  'topic': 'topic_name', 'subject': 'subject_name',
+  'mark': 'marks', 'score': 'marks', 'points': 'marks',
+  'pyq': 'is_pyq', 'past_paper': 'is_pyq',
+  'option_a': 'opt_a', 'a': 'opt_a',
+  'option_b': 'opt_b', 'b': 'opt_b',
+  'option_c': 'opt_c', 'c': 'opt_c',
+  'option_d': 'opt_d', 'd': 'opt_d',
+  'answer': 'correct_opt', 'correct': 'correct_opt', 'correct_answer': 'correct_opt'
+};
+
 function checkCSV(text){
   const rows=parseCSV(text).filter(r=>r.some(c=>c.trim()!==''));
-  const need=['question_text','marks','diff_level','is_pyq','question_type','opt_a','opt_b','opt_c','opt_d','correct_opt','subject_name','topic_name','unit_number'];
-  const h=(rows[0]||[]).map(x=>x.trim()); const miss=need.filter(c=>!h.includes(c));
-  if(miss.length) return {fatal:`Missing columns: ${miss.join(', ')}.`};
+  const need=['question_text','marks','diff_level','question_type','subject_name','topic_name','unit_number'];
+  const rawH=(rows[0]||[]).map(x=>x.trim());
+  const h=rawH.map(c=>CSV_ALIASES[c.toLowerCase()] || c.toLowerCase());
+  const miss=need.filter(c=>!h.includes(c));
+  if(miss.length) return {fatal:`Missing required columns: ${miss.join(', ')}. Click 'Download sample CSV template' below for the exact format.`};
   const ix=Object.fromEntries(h.map((c,i)=>[c,i])), issues=[]; let ok=0;
   rows.slice(1).forEach((r,n)=>{
     const g=c=>(r[ix[c]]||'').trim(), line=n+2, e=[];
@@ -707,10 +1294,42 @@ async function doPoolCheck() {
   } catch(e) {}
 }
 
+function generatePin() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let pin = '';
+  for (let i = 0; i < 6; i++) pin += chars.charAt(Math.floor(Math.random() * chars.length));
+  return pin;
+}
+
+$('#oaGenPin')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  $('#oaPasskey').value = generatePin();
+});
+
 $('#oaCreate').onclick = async () => {
   const btn = $('#oaCreate'); btn.disabled = true; btn.textContent = 'Creating...';
   try {
-    const exam = await api.createExam({
+    const wOpen = $('#oaWinOpen').value || null;
+    const wClose = $('#oaWinClose').value || null;
+    const lMins = parseInt($('#oaLateMins').value) || 15;
+
+    if (wOpen && wClose) {
+      const oDate = new Date(wOpen);
+      const cDate = new Date(wClose);
+      if (cDate <= oDate) {
+        toast('Exam End Time must be after Start Time.');
+        btn.disabled = false; btn.textContent = 'Create exam';
+        return;
+      }
+      const diffMins = Math.round((cDate - oDate) / 60000);
+      if (lMins > diffMins) {
+        toast(`Late entry cutoff (${lMins} mins) cannot exceed the total window duration (${diffMins} mins).`);
+        btn.disabled = false; btn.textContent = 'Create exam';
+        return;
+      }
+    }
+
+    const payload = {
       title: $('#oaTitle').value || 'Online Test',
       topic_ids: [...$$('input[name="oaTopic"]:checked')].map(el => el.value).join(','),
       num_questions: parseInt($('#oaNumQ').value) || 20,
@@ -718,8 +1337,14 @@ $('#oaCreate').onclick = async () => {
       mode: 'adaptive',
       start_difficulty: $('#oaStart').value,
       review_level: $('#oaRev').value,
-    });
-    toast(`Exam "${exam.title}" created successfully!`);
+      window_open: wOpen,
+      window_close: wClose,
+      late_entry_mins: lMins,
+      target_batch: $('#oaAudience').value || 'All',
+      passkey: $('#oaPasskey').value.trim().toUpperCase() || null
+    };
+    const exam = await api.createExam(payload);
+    toast(`Exam "${exam.title}" created successfully! Passkey: ${exam.passkey}`);
     await loadTExams();
     go('texams');
   } catch(e) { toast('Error: '+e.message); }
@@ -793,21 +1418,24 @@ async function renderTExams(){
     else if(st==='ready' || st==='unreleased') act=`<button class="btn primary" data-act="rel" data-id="${e.exam_id}">Release results</button>`;
     else if(st==='released') act=`<button class="btn" data-act="rel" data-id="${e.exam_id}">Change visibility</button>`;
     
-    act += ` <button class="btn" onclick="alert('Preview mode will launch the student test player here.')">Preview</button> <button class="btn danger" data-act="del" data-id="${e.exam_id}" style="color:var(--bad)">Delete</button>`;
-    
-    if (sub > 0) {
-      act += ` <a class="btn" href="/exams/${e.exam_id}/export" target="_blank" title="Export to CSV">CSV</a>`;
-    }
+    act += ` <button class="btn" data-act="edit" data-id="${e.exam_id}">Edit</button> <button class="btn" data-act="preview" data-id="${e.exam_id}">Preview</button> <button class="btn danger" data-act="del" data-id="${e.exam_id}" style="color:var(--bad)">Delete</button>`;
     
     return `<tr>
       <td>
         <b>${esc(e.title)}</b> <span class="badge">${e.category || 'Formal'}</span>
-        <br><span style="font-size:12px;color:var(--brand);font-weight:bold">Passkey: ${e.passkey || 'None'}</span>
-        ${st==='released'?`<div class="sub">Students see: ${LVL[lvl]?LVL[lvl][0].toLowerCase():lvl}</div>`:''}
+        <div style="margin-top:4px;font-size:12px;display:flex;gap:10px;align-items:center">
+          <span style="font-weight:700;color:var(--fg)">Room ID: <span style="font-family:monospace;color:var(--brand)">${e.exam_id}</span></span>
+          <span style="font-weight:700;color:var(--fg)">Passkey: <span style="font-family:monospace;color:var(--brand)">${e.passkey || 'None'}</span></span>
+        </div>
+        ${st==='released'?`<div class="sub" style="margin-top:2px">Students see: ${LVL[lvl]?LVL[lvl][0].toLowerCase():lvl}</div>`:''}
       </td>
       <td><span class="badge ${mode==='Adaptive'?'brand':''}">${mode}</span></td>
-      <td class="sub">${e.window_open||e.created_at||'—'}</td>
-      <td class="num">${sub} submitted</td>
+      <td class="sub">${e.window_open ? (e.window_open + (e.window_close ? ' to ' + e.window_close : '')) : 'Open immediately (No deadline)'}</td>
+      <td class="num">
+        <a href="#" style="text-decoration:none;font-weight:600;color:var(--brand)" data-act="view-subm" data-id="${e.exam_id}">
+          ${sub} submitted
+        </a>
+      </td>
       <td><span class="badge ${bc}">${bl}</span></td>
       <td style="text-align:right">${act}</td>
     </tr>`;
@@ -815,31 +1443,223 @@ async function renderTExams(){
 }
 
 $('#texRows')?.addEventListener('click', async e => {
-  const b = e.target.closest('button');
+  const b = e.target.closest('button, a[data-act]');
   if(!b) return;
-  if(b.dataset.act === 'del') {
-    if(confirm('Are you sure you want to delete this exam? All student sessions will be lost.')) {
-      b.disabled = true;
-      try {
-        await api.deleteExam(b.dataset.id);
-        toast('Exam deleted successfully.');
-        await renderTExams();
-        await renderTDash();
-      } catch(err) {
-        toast('Error: ' + err.message);
-        b.disabled = false;
+  const examId = +b.dataset.id;
+  
+  if(b.dataset.act === 'rel') {
+    openRelease(examId);
+    return;
+  }
+  
+  if(b.dataset.act === 'view-subm') {
+    e.preventDefault();
+    try {
+      const res = await api.examSubmissions(examId);
+      $('#submExamTitle').textContent = `Submissions: ${res.title}`;
+      $('#submExamMeta').textContent = `Room ID #${examId} • Total ${res.submissions.length} student submission(s)`;
+      $('#submExportCsv').href = `/exams/${examId}/export`;
+      const rows = $('#submRows');
+      if (!res.submissions.length) {
+        rows.innerHTML = `<tr><td colspan="6"><div class="empty">No student submissions yet for this exam.</div></td></tr>`;
+      } else {
+        rows.innerHTML = res.submissions.map(s => `
+          <tr>
+            <td><b>${esc(s.student_id)}</b></td>
+            <td class="num" style="font-weight:700;color:var(--brand)">${s.total_score} marks</td>
+            <td class="num">${s.correct_answers} / ${s.total_answered}</td>
+            <td class="sub">${s.started_at || '—'}</td>
+            <td class="sub">${s.submitted_at ? `<span class="badge ok">Submitted: ${s.submitted_at}</span>` : '<span class="badge warn">In Progress</span>'}</td>
+            <td style="text-align:right">
+              <button class="btn" style="padding:4px 8px;font-size:12px" data-act="inspect-answers" data-session="${s.session_id}">Inspect answers</button>
+            </td>
+          </tr>
+        `).join('');
       }
+      $('#dlgSubmissions').showModal();
+    } catch(err) {
+      toast('Error loading submissions: ' + err.message);
     }
+    return;
+  }
+
+  if(b.dataset.act === 'edit') {
+    const ex = _texams.find(x => x.exam_id === examId);
+    if (!ex) return;
+    $('#eeExamId').value = ex.exam_id;
+    $('#eeTitle').value = ex.title || '';
+    $('#eeWinOpen').value = ex.window_open || '';
+    $('#eeWinClose').value = ex.window_close || '';
+    $('#eeLateMins').value = ex.late_entry_mins != null ? ex.late_entry_mins : 15;
+    $('#eePasskey').value = ex.passkey || '';
+    $('#eeErr').style.display = 'none';
+    $('#dlgEditExam').showModal();
+    return;
+  }
+
+  if(b.dataset.act === 'preview') {
+    try {
+      b.disabled = true;
+      const sess = await api.startSession(examId, 'teacher_preview', null, true);
+      toast('Launching Exam Preview mode...');
+      startLiveExamSession(sess, true);
+    } catch(err) {
+      toast('Preview error: ' + err.message);
+    } finally {
+      b.disabled = false;
+    }
+    return;
+  }
+  if(b.dataset.act === 'del') {
+    const ok = await uiConfirm({
+      title: "Delete Exam?",
+      message: "Are you sure you want to delete this exam? All student sessions and scores will be permanently deleted.",
+      okText: "Delete Exam",
+      isDanger: true
+    });
+    if (!ok) return;
+    b.disabled = true;
+    try {
+      await api.deleteExam(b.dataset.id);
+      toast('Exam deleted successfully.');
+      await renderTExams();
+      await renderTDash();
+    } catch(err) {
+      toast('Error: ' + err.message);
+      b.disabled = false;
+    }
+  }
+});
+
+// Submissions Modal Handlers
+$('#submClose')?.addEventListener('click', () => $('#dlgSubmissions').close());
+$('#submRows')?.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act="inspect-answers"]');
+  if (!b) return;
+  const sessId = +b.dataset.session;
+  try {
+    b.disabled = true;
+    const rev = await api.teacherSessionReview(sessId);
+    $('#revTitle').textContent = `Answer Sheet: ${rev.student_id}`;
+    $('#revSub').textContent = `${rev.exam_title} • Score: ${rev.total_marks} / ${rev.max_marks} marks • Submitted: ${rev.submitted_at || 'In progress'}`;
+    
+    if (!rev.responses || !rev.responses.length) {
+      $('#revBody').innerHTML = `<div class="empty">No questions recorded for this session.</div>`;
+    } else {
+      $('#revBody').innerHTML = rev.responses.map((it, n) => {
+        const ok = Boolean(it.is_correct);
+        const opts = [
+          { key: 'A', text: it.opt_a },
+          { key: 'B', text: it.opt_b },
+          { key: 'C', text: it.opt_c },
+          { key: 'D', text: it.opt_d }
+        ].filter(o => Boolean(o.text));
+
+        return `
+          <div class="qrev" style="margin-bottom:16px;padding:12px;border:1px solid var(--line);border-radius:8px">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
+              <b>${n + 1}. ${esc(it.question_text)}</b>
+              <div style="display:flex;gap:6px;align-items:center">
+                <span class="badge ${it.diff_level==='Easy'?'ok':it.diff_level==='Hard'?'bad':'warn'}">${it.diff_level || 'Medium'}</span>
+                <span class="badge ${ok ? 'ok' : 'bad'}">${ok ? '✓ Correct (' + it.marks_awarded + 'm)' : '✗ Incorrect (0m)'}</span>
+              </div>
+            </div>
+            ${opts.map(o => {
+              let c = '', tag = '';
+              const isStudentPick = (it.chosen_opt || '').toUpperCase() === o.key;
+              const isCorrectOpt = (it.correct_opt || '').toUpperCase() === o.key;
+
+              if (isStudentPick) {
+                c = ok ? 'ok' : 'bad';
+                tag = 'Student Answer';
+              }
+              if (isCorrectOpt && !ok) {
+                c = 'ok';
+                tag = tag ? tag + ' (Correct)' : 'Correct Answer';
+              }
+              return `
+                <div class="ropt ${c}">
+                  <span class="key">${o.key}</span>
+                  <span>${esc(o.text)}</span>
+                  ${tag ? `<span class="tag">${tag}</span>` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }).join('');
+    }
+    $('#revDlg').showModal();
+  } catch(err) {
+    toast('Error: ' + err.message);
+  } finally {
+    b.disabled = false;
+  }
+});
+
+// Edit Exam Modal Handlers
+$('#eeCancel')?.addEventListener('click', () => $('#dlgEditExam').close());
+$('#eeSave')?.addEventListener('click', async () => {
+  const examId = +$('#eeExamId').value;
+  const title = $('#eeTitle').value.trim();
+  const err = $('#eeErr');
+  err.style.display = 'none';
+  if (!title) {
+    err.textContent = 'Exam title cannot be empty.';
+    err.style.display = 'block';
+    return;
+  }
+
+  const winOpen = $('#eeWinOpen').value || null;
+  const winClose = $('#eeWinClose').value || null;
+  const lateMins = parseInt($('#eeLateMins').value);
+
+  if (winOpen && winClose) {
+    const oDate = new Date(winOpen);
+    const cDate = new Date(winClose);
+    if (cDate <= oDate) {
+      err.textContent = 'End Time (Window Close) must be after Start Time (Window Open).';
+      err.style.display = 'block';
+      return;
+    }
+    const diffMins = Math.round((cDate - oDate) / 60000);
+    if (!isNaN(lateMins) && lateMins > diffMins) {
+      err.textContent = `Late entry cutoff (${lateMins} mins) cannot exceed the total window duration (${diffMins} mins).`;
+      err.style.display = 'block';
+      return;
+    }
+  }
+
+  const btn = $('#eeSave');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    await api.updateExam(examId, {
+      title,
+      window_open: $('#eeWinOpen').value || null,
+      window_close: $('#eeWinClose').value || null,
+      late_entry_mins: parseInt($('#eeLateMins').value) || 15,
+      passkey: $('#eePasskey').value.trim().toUpperCase() || null
+    });
+    $('#dlgEditExam').close();
+    toast('Exam updated successfully!');
+    await renderTExams();
+  } catch(e) {
+    err.textContent = e.message;
+    err.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
   }
 });
 
 function teacherAct(e){
   const b=e.target.closest('[data-act]'); if(!b) return; const a=b.dataset.act;
-  if(a==='mark') toast('Select responses to mark from the exam submissions view (coming soon).');
+  if(a==='mark') toast('Select responses to mark from the exam submissions view.');
   else if(a==='exams') go('texams');
   else if(a==='rel') openRelease(+b.dataset.id);
 }
-$('#tdAttn').addEventListener('click',teacherAct); $('#texRows').addEventListener('click',teacherAct);
+$('#tdAttn').addEventListener('click',teacherAct);
 $('#qaImport').onclick=()=>{go('bank'); $('#openImport').click()};
 
 function openCreateExamDlg(){
@@ -930,38 +1750,132 @@ $('#relGo').onclick=async ()=>{
   }
 };
 
-const REV={
- 'OS unit 1 practice':[
-  {q:'Which UNIX command lists the files in a directory?',o:['cd','ls','pwd','rm'],you:1,right:1,why:'ls lists directory contents; cd changes directory and pwd prints the current one.'},
-  {q:'The pwd command displays:',o:['The user password','Process work details','The present working directory','The previous working directory'],you:2,right:2,why:'pwd stands for print working directory.'},
-  {q:'Which filter command is used to search for a pattern in a file?',o:['sort','head','wc','grep'],you:0,right:3,why:'grep searches for patterns; sort only orders lines.'},
-  {q:'In vi, which command saves the file and quits the editor?',o:[':q!',':w!',':wq','dd'],you:2,right:2,why:':wq writes the file and quits; :q! quits without saving.'},
-  {q:'The command wc -l file.txt prints the number of:',o:['Words','Characters','Lines','Files'],you:2,right:2,why:'The -l option counts lines.'}],
- 'DBMS unit 2 quiz':[
-  {q:'A weak entity type is one that:',o:['Has no attributes','Cannot be uniquely identified by its own attributes alone','Has no relationships','Is always optional'],you:1,right:1,why:'It depends on an owner entity for identification.'},
-  {q:'A weak entity type is drawn as a:',o:['Single rectangle','Diamond','Double rectangle','Ellipse'],you:0,right:2,why:'Weak entity types use a double rectangle.'},
-  {q:'The degree of a relationship type is:',o:['The number of attributes','The number of participating entity types','The number of tuples','The cardinality ratio'],you:1,right:1,why:'Degree counts the entity types that participate.'},
-  {q:'Total participation of an entity type in a relationship is shown by a:',o:['Single line','Dashed line','Arrow','Double line'],you:1,right:3,why:'Total participation is drawn as a double line.'},
-  {q:'A relationship among three entity types is called:',o:['Ternary','Binary','Unary','Recursive'],you:0,right:0,why:'Three participants make it ternary.'}]
-};
-const score=t=>REV[t].filter(x=>x.you===x.right).length+' / '+REV[t].length;
-function renderResults(){
-  const done=EXAMS.filter(x=>x.status==='done');
-  $('#resList').innerHTML=done.length?done.map(e=>`<div class="exam-row"><div><h3>${esc(e.title)}</h3><div class="meta"><span>${esc(e.sub)}</span><span>${e.when}</span></div><div class="meta" style="margin-top:4px"><span class="badge">${LVL[e.level][0]}</span></div></div><div class="act"><span class="score num">${score(e.title)}</span><button class="btn" data-review="${e.id}">View review</button></div></div>`).join(''):'<div class="empty">No released results yet. When a teacher releases one, it appears here.</div>';
+async function renderResults() {
+  await loadStudentExams();
+  const box = $('#resList');
+  if (!box) return;
+  const submittedExams = _studentExams.filter(e => e.has_submitted);
+  if (!submittedExams.length) {
+    box.innerHTML = '<div class="empty">No completed exams yet. Take an exam from the "My exams" tab.</div>';
+    return;
+  }
+
+  box.innerHTML = submittedExams.map(e => {
+    const released = e.results_released || e.computed_status === 'released';
+    const subTitle = (e.topics && e.topics.length) ? e.topics[0].subject_name : 'Assessment';
+    const sessionId = e.my_session?.session_id;
+
+    return `
+      <div class="exam-row">
+        <div>
+          <h3>${esc(e.title)}</h3>
+          <div class="meta">
+            <span>${esc(subTitle)}</span>
+            <span>${e.num_questions} questions</span>
+            <span class="badge ${released ? 'ok' : 'warn'}">${released ? 'Results Released' : 'Awaiting Release'}</span>
+          </div>
+        </div>
+        <div class="act">
+          ${released && sessionId ? `<button class="btn primary" data-review-session="${sessionId}">View review</button>` : `<span class="sub" style="font-size:12px">Pending teacher release</span>`}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
-function openReview(id){
-  const e=EXAMS.find(x=>x.id==id), lvl=e.level||'score_and_correctness', items=REV[e.title];
-  $('#revTitle').textContent=e.title; $('#revSub').textContent=`Your score: ${score(e.title)}. ${LVL[lvl][1]}`;
-  $('#revBody').innerHTML = lvl==='score_only' ? '<div class="empty">Your teacher chose to show scores only for this exam.</div>' :
-   items.map((it,n)=>{ const ok=it.you===it.right;
-     return `<div class="qrev"><div style="display:flex;justify-content:space-between;gap:12px"><b>${n+1}. ${esc(it.q)}</b><span class="badge ${ok?'ok':'bad'}">${ok?'Correct':'Incorrect'}</span></div>
-      ${it.o.map((o,k)=>{ let c='',t=''; if(k===it.you){ c=ok?'ok':'bad'; t='Your answer'; } if(lvl==='full_review'&&k===it.right&&!ok){ c='ok'; t='Correct answer'; }
-        return `<div class="ropt ${c}"><span class="key">${'ABCD'[k]}</span><span>${esc(o)}</span><span class="tag">${t}</span></div>`; }).join('')}
-      ${lvl==='full_review'?`<p class="sub" style="margin-top:8px">${esc(it.why)}</p>`:''}</div>`; }).join('');
+
+async function openReview(resOrSessionId) {
+  let res = resOrSessionId;
+  if (typeof resOrSessionId === 'number' || typeof resOrSessionId === 'string') {
+    try {
+      const sId = +resOrSessionId;
+      const uname = user ? user.name : 'student';
+      res = await api.results(sId, uname);
+    } catch (err) {
+      toast('Error fetching result: ' + err.message);
+      return;
+    }
+  }
+
+  if (!res) return;
+  if (res.status === 'submitted') {
+    toast('Results have not been released by your teacher yet.');
+    return;
+  }
+  if (res.status === 'pending_marking') {
+    toast(res.message || 'Subjective questions are pending marking by instructor.');
+    return;
+  }
+
+  const lvl = res.review_level || 'score_and_correctness';
+  const totalScore = res.total_score != null ? res.total_score : 0;
+  const maxScore = res.max_score != null ? res.max_score : 0;
+  const lvlDesc = (LVL && LVL[lvl]) ? LVL[lvl][1] : '';
+
+  $('#revTitle').textContent = res.exam_title || 'Exam Result';
+  $('#revSub').textContent = `Your score: ${totalScore} / ${maxScore} marks • ${lvlDesc}`;
+
+  if (lvl === 'score_only') {
+    $('#revBody').innerHTML = `
+      <div style="padding:24px;text-align:center">
+        <h3 style="font-size:20px;margin-bottom:8px">Score: ${totalScore} / ${maxScore} marks</h3>
+        <p class="sub">Your teacher has configured results to show score only for this exam.</p>
+      </div>`;
+  } else if (!res.responses || !res.responses.length) {
+    $('#revBody').innerHTML = '<div class="empty">No response details available for this session.</div>';
+  } else {
+    $('#revBody').innerHTML = res.responses.map((it, n) => {
+      const ok = Boolean(it.is_correct);
+      const isFull = lvl === 'full_review';
+      const chosen = (it.chosen_opt || '').toUpperCase();
+      const correct = (it.correct_opt || '').toUpperCase();
+
+      const opts = [
+        { key: 'A', text: it.opt_a },
+        { key: 'B', text: it.opt_b },
+        { key: 'C', text: it.opt_c },
+        { key: 'D', text: it.opt_d }
+      ].filter(o => Boolean(o.text));
+
+      return `
+        <div class="qrev" style="margin-bottom:16px;padding:12px;border:1px solid var(--line);border-radius:8px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px">
+            <b>${n + 1}. ${esc(it.question_text)}</b>
+            <div style="display:flex;gap:6px;align-items:center">
+              <span class="badge ${chosen ? (ok ? 'ok' : 'bad') : 'warn'}">
+                ${!chosen ? 'Unanswered' : (ok ? `✓ Correct (+${it.marks_awarded != null ? it.marks_awarded : it.marks}m)` : `✗ Incorrect (0m)`)}
+              </span>
+            </div>
+          </div>
+          ${opts.map(o => {
+            let c = '', tag = '';
+            if (o.key === chosen) {
+              c = ok ? 'ok' : 'bad';
+              tag = ok ? 'Your answer (Correct)' : 'Your answer (Incorrect)';
+            }
+            if (isFull && o.key === correct && (!ok || !chosen)) {
+              c = 'ok';
+              tag = tag ? tag + ' (Correct)' : 'Correct answer';
+            }
+            return `
+              <div class="ropt ${c}">
+                <span class="key">${o.key}</span>
+                <span>${esc(o.text)}</span>
+                ${tag ? `<span class="tag">${tag}</span>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }).join('');
+  }
+
   $('#revDlg').showModal();
 }
-$('#resList').addEventListener('click',e=>{const b=e.target.closest('[data-review]'); if(b) openReview(b.dataset.review)});
-$('#revClose').onclick=()=>$('#revDlg').close();
+$('#resList')?.addEventListener('click', e => {
+  const b = e.target.closest('[data-review-session]');
+  if (b) openReview(+b.dataset.reviewSession);
+});
+$('#revClose').onclick = () => $('#revDlg').close();
 
 function Sim(cfg){
   const cache=new Map(), studs=[]; let evicted=[];
@@ -1028,18 +1942,73 @@ $('#runCmp').onclick=()=>{
 };
 
 /* init */
-renderExams(); runChecks(); renderBank(); setLTab('student');
+renderExams(); runChecks(); loadBankSubjects().then(() => renderBank()); setLTab('student');
 boot();
 
 $('#btnAddSubject')?.addEventListener('click', async e => {
   e.preventDefault();
-  const name = prompt("Enter a name for your private subject/pool (e.g. 'CN Mid-Sem Private'):");
-  if(!name) return;
+  const name = await uiPrompt({
+    title: "Create Private Question Pool",
+    message: "Enter a name for your private subject/pool. Only you can view or use questions in this pool:",
+    placeholder: "e.g. CN Mid-Sem Private Pool",
+    okText: "Create Pool"
+  });
+  if (!name) return;
   try {
-    await api.createSubject({subject_name: name, is_private: true});
-    await initBlueprint(); // Reload subjects
-    alert('Private pool created! You can now import questions into it.');
+    await api.createSubject({subject_name: name.trim(), is_private: true});
+    await loadBankSubjects();
+    if (typeof initBlueprint === 'function') await initBlueprint();
+    toast(`Private pool "${name.trim()}" created successfully!`);
+    renderBank();
   } catch(err) {
-    alert(err.message);
+    toast("Error: " + err.message);
   }
+});
+
+
+/* Subject-wise Restore Default Bank */
+$('#btnResetBank')?.addEventListener('click', () => {
+  $('#dlgRestoreBank')?.showModal();
+});
+
+$('#restoreCancel')?.addEventListener('click', () => {
+  $('#dlgRestoreBank')?.close();
+});
+
+$('#restoreOk')?.addEventListener('click', async () => {
+  const sel = $('#restoreSubjectSelect')?.value || 'all';
+  const okBtn = $('#restoreOk');
+  okBtn.disabled = true;
+  okBtn.textContent = 'Restoring...';
+  try {
+    const res = await api.resetDefaultBank(sel);
+    toast(res.message || "Default questions restored successfully!");
+    $('#dlgRestoreBank')?.close();
+    await loadBankSubjects();
+    renderBank();
+  } catch(err) {
+    toast("Error: " + err.message);
+  } finally {
+    okBtn.disabled = false;
+    okBtn.textContent = 'Restore Subject';
+  }
+});
+
+/* Download sample CSV template */
+$('#btnDownloadTemplate')?.addEventListener('click', (e) => {
+  e.preventDefault();
+  const csvHeaders = "question_text,question_type,marks,diff_level,is_pyq,opt_a,opt_b,opt_c,opt_d,correct_opt,subject_name,topic_name,unit_number\n";
+  const row1 = '"What is the primary role of an Operating System?",MCQ,1,Easy,1,"Resource management","Word processing","Graphics rendering","Browser hosting",A,"Operating Systems","OS Overview",1\n';
+  const row2 = '"Explain the ACID properties in database management systems.",SUBJECTIVE,5,Medium,0,,,,,"Database Management Systems","Transactions",3\n';
+  const content = csvHeaders + row1 + row2;
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'apex_sample_question_template.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast("Sample CSV template downloaded!");
 });

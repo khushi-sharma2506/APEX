@@ -32,6 +32,12 @@ export const api = {
   me: () => req("GET", "/me"),
 
   subjects: () => req("GET", "/subjects"),
+  createSubject: (data) => req("POST", "/subjects", null, data),
+  updateSubject: (id, data) => req("PUT", `/subjects/${id}`, null, data),
+  deleteSubject: (id) => req("DELETE", `/subjects/${id}`),
+  resetDefaultBank: (subject) => req("POST", "/reset_default_bank", subject && subject !== "all" ? { subject_name: subject } : null),
+  createQuestion: (data) => req("POST", "/questions", null, data),
+  updateQuestion: (id, data) => req("PUT", `/questions/${id}`, null, data),
   topics: (sid) => req("GET", "/topics", sid ? { subject_id: sid } : null),
 
   questions: (p) => req("GET", "/questions", p),
@@ -64,11 +70,14 @@ export const api = {
 
   listExams: () => req("GET", "/exams"),
   createExam: (data) => req("POST", "/exams", null, data),
+  updateExam: (id, data) => req("PUT", `/exams/${id}`, null, data),
+  examSubmissions: (id) => req("GET", `/exams/${id}/submissions`),
+  teacherSessionReview: (id) => req("GET", `/session/${id}/review`),
   releaseResults: (id, released, review_level) => req("PATCH", `/exams/${id}/release`, null, { released, review_level }),
   deleteExam: (id) => req("DELETE", `/exams/${id}`),
 
-  startSession: (examId, studentId) =>
-    req("POST", "/start_session", null, { exam_id: examId, student_id: studentId }),
+  startSession: (examId, studentId, passkey = null, isPreview = false) =>
+    req("POST", "/start_session", null, { exam_id: examId, student_id: studentId, passkey, is_preview: isPreview }),
   getSession: (id) => req("GET", `/session/${id}`),
   nextQuestion: (id) => req("POST", `/session/${id}/next`),
   submitAnswer: (id, qId, chosenOpt) =>

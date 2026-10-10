@@ -174,7 +174,22 @@
       <section class="view" id="view-exams">
         <div class="head"><div><h1>My exams</h1><p>Exams your teachers have assigned to you. You can only start an exam while it is open.</p></div></div>
         <div class="two">
-          <div class="card" id="examList"></div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div class="card pad" style="background:linear-gradient(135deg, rgba(20,90,180,0.04), transparent)">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+                <div>
+                  <h2 style="font-size:16px;margin:0 0 2px">Have an Exam Room Code?</h2>
+                  <p class="sub" style="font-size:13px;margin:0">Enter the Room Code &amp; PIN provided by your teacher to unlock an exam.</p>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center">
+                  <input class="input" id="joinRoomId" placeholder="Room ID (e.g. 1)" style="width:110px">
+                  <input class="input" id="joinPin" placeholder="PIN" maxlength="8" style="width:100px;font-family:monospace;text-transform:uppercase">
+                  <button class="btn primary" id="btnJoinRoom">Join Room</button>
+                </div>
+              </div>
+            </div>
+            <div class="card" id="examList"></div>
+          </div>
           <div class="card pad">
             <h2>System check</h2>
             <p class="sub" style="margin:4px 0 8px">Run this before an exam to catch problems early.</p>
@@ -187,23 +202,30 @@
       <!-- TEACHER: bank -->
       <section class="view" id="view-bank" hidden>
         <div class="head">
-          <div><h1>Question bank</h1><p>Search, filter and review every question. Showing a sample of the full 500-question bank.</p></div>
-          <button class="btn primary" id="openImport">Import CSV</button>
+          <div><h1>Question bank</h1><p>Search, filter, edit and create questions. Showing your question bank.</p></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn primary" id="openAddQ">+ Add question</button>
+            <button class="btn" id="openImport">Import CSV</button>
+            <button class="btn" id="btnResetBank" title="Restore all default university questions">Restore defaults</button>
+          </div>
         </div>
         <div class="card">
           <div class="filters">
             <label class="field"><span>Search</span><input class="input" id="fq" type="search" placeholder="Search question text"></label>
             <label class="field">
   <div style="display:flex;justify-content:space-between;align-items:center">
-    <span>Subject</span>
-    <a href="#" id="btnAddSubject" style="font-size:12px;color:var(--brand);text-decoration:none;font-weight:600">+ Add private pool</a>
+    <span>Subject / Pool</span>
+    <div style="display:flex;gap:10px">
+      <a href="#" id="btnAddSubject" style="font-size:12px;color:var(--brand);text-decoration:none;font-weight:600">+ Add private pool</a>
+      <a href="#" id="btnManagePools" style="font-size:12px;color:var(--muted);text-decoration:none;font-weight:500">Manage pools</a>
+    </div>
   </div>
   <select class="select" id="fs"><option value="">All subjects</option></select>
 </label>
             <label class="field"><span>Difficulty</span><select class="select" id="fd"><option value="">All levels</option><option>Easy</option><option>Medium</option><option>Hard</option></select></label>
             <label class="field"><span>Type</span><select class="select" id="ft"><option value="">All types</option><option value="MCQ">MCQ</option><option value="SUBJECTIVE">Subjective</option></select></label>
           </div>
-          <div class="scroll"><table class="tbl"><thead><tr><th>Question</th><th>Type</th><th>Difficulty</th><th>Marks</th><th>Topic</th></tr></thead><tbody id="bankRows"></tbody></table></div>
+          <div class="scroll"><table class="tbl"><thead><tr><th>Question</th><th>Type</th><th>Difficulty</th><th>Marks</th><th>Topic</th><th style="text-align:right">Actions</th></tr></thead><tbody id="bankRows"></tbody></table></div>
           <div class="sub" id="bankCount" style="padding:12px 20px;border-top:1px solid var(--line)"></div>
         </div>
       </section>
@@ -263,6 +285,36 @@
                 <label class="field"><span>Number of questions</span><input class="input" type="number" id="oaNumQ" value="20" min="1" max="50"></label>
                 <label class="field"><span>Duration (minutes)</span><input class="input" type="number" id="oaDur" value="30" min="5" max="180"></label>
                 <label class="field"><span>Starting difficulty</span><select class="select" id="oaStart"><option>Easy</option><option selected>Medium</option><option>Hard</option></select></label>
+
+                <!-- Scheduling & Time Window -->
+                <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:12px;margin-top:4px">
+                  <h3 style="font-size:15px;margin:0 0 4px">Schedule & Time Window</h3>
+                  <p class="sub" style="font-size:13px;margin:0 0 12px">Control when students can access this exam and login deadlines.</p>
+                </div>
+                <label class="field"><span>Exam Start Time (Window Open)</span><input class="input" type="datetime-local" id="oaWinOpen"></label>
+                <label class="field"><span>Exam End Time (Window Close)</span><input class="input" type="datetime-local" id="oaWinClose"></label>
+                <label class="field">
+                  <span>Late Entry Allowed (minutes)</span>
+                  <input class="input" type="number" id="oaLateMins" value="15" min="0" max="60" placeholder="e.g. 15">
+                  <span class="sub" style="font-size:11px;margin-top:2px">Students can only start within the first N minutes of the exam.</span>
+                </label>
+                <label class="field">
+                  <span>Assign To (Audience)</span>
+                  <select class="select" id="oaAudience">
+                    <option value="All" selected>All Students (shows on dashboard)</option>
+                    <option value="CSE-A">CSE - Section A</option>
+                    <option value="CSE-B">CSE - Section B</option>
+                    <option value="PasskeyOnly">Private (Room Code & PIN only)</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <div style="display:flex;justify-content:space-between">
+                    <span>Room Passkey / PIN</span>
+                    <a href="#" id="oaGenPin" style="font-size:12px;color:var(--brand);text-decoration:none;font-weight:600">🔄 Generate PIN</a>
+                  </div>
+                  <input class="input" id="oaPasskey" placeholder="6-char PIN (e.g. K9X2B4)" maxlength="8" style="font-family:monospace;letter-spacing:1px;text-transform:uppercase">
+                </label>
+
                 <label class="field"><span>Marks mode</span>
                    <div style="display:flex;gap:16px;margin-top:6px">
                      <label><input type="radio" name="oaMarksMode" value="1 mark for all" checked> 1 mark for all</label>
@@ -346,7 +398,7 @@
   <header class="exam-top">
     <div class="t" id="exTitle">Mixed practice quiz</div>
     <div class="mid"><div class="sub num" id="exCount">Question 1 of 8</div><div class="prog"><i id="exBar"></i></div></div>
-    <div class="right"><span class="sub" id="exSave" aria-live="polite"></span><span class="timer" id="exTimer" role="timer">10:00</span><button class="btn quiet" id="exExit">Exit demo</button></div>
+    <div class="right"><span class="sub" id="exSave" aria-live="polite"></span><span class="timer" id="exTimer" role="timer">10:00</span><button class="btn quiet" id="exExit">Exit</button></div>
   </header>
   <div class="exam-body"><div class="qwrap" id="exBody"></div></div>
   <footer class="exam-foot" id="exFoot">
@@ -435,8 +487,173 @@
   <div class="dlg-foot"><button class="btn" id="ceCancel">Cancel</button><button class="btn primary" id="ceSave">Create exam</button></div>
 </dialog>
 
+
+<!-- Add/Edit Question Dialog -->
+<dialog id="dlgQuestion" class="wide">
+  <div class="dlg-body">
+    <h2 style="font-size:20px;letter-spacing:-.01em" id="dlgQTitle">Add Question</h2>
+    <p class="sub" style="margin:6px 0 16px" id="dlgQSub">Add a question directly to the question bank or a private pool.</p>
+    <input type="hidden" id="qEditId" value="">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <label class="field"><span>Subject / Pool</span><select class="select" id="qSub"></select></label>
+      <label class="field"><span>Unit</span><select class="select" id="qUnit"><option value="1">Unit 1</option><option value="2">Unit 2</option><option value="3">Unit 3</option><option value="4">Unit 4</option><option value="5">Unit 5</option></select></label>
+    </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <label class="field"><span>Topic Name</span><input class="input" id="qTopic" placeholder="e.g. CPU Scheduling"></label>
+      <label class="field"><span>Type</span><select class="select" id="qType"><option value="MCQ">MCQ</option><option value="SUBJECTIVE">Subjective</option></select></label>
+      <label class="field"><span>Marks</span><input class="input" id="qMarks" type="number" min="1" value="1"></label>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <label class="field"><span>Difficulty</span><select class="select" id="qDiff"><option value="Easy">Easy</option><option value="Medium" selected>Medium</option><option value="Hard">Hard</option></select></label>
+      <label class="field" style="display:flex;align-items:center;gap:8px;padding-top:20px"><input type="checkbox" id="qPyq" value="1"> <span>Previous Year Question (PYQ)</span></label>
+    </div>
+    <label class="field" style="margin-bottom:12px"><span>Question Text</span><textarea class="input" id="qText" rows="3" placeholder="Enter question text..." style="resize:vertical"></textarea></label>
+    <div id="mcqFields" style="padding:14px;background:var(--sunken);border-radius:8px;margin-bottom:12px">
+      <span style="font-size:13px;font-weight:600;display:block;margin-bottom:10px">MCQ Options</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <label class="field"><span>Option A</span><input class="input" id="qOptA" placeholder="Option A"></label>
+        <label class="field"><span>Option B</span><input class="input" id="qOptB" placeholder="Option B"></label>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+        <label class="field"><span>Option C</span><input class="input" id="qOptC" placeholder="Option C"></label>
+        <label class="field"><span>Option D</span><input class="input" id="qOptD" placeholder="Option D"></label>
+      </div>
+      <label class="field" style="max-width:180px"><span>Correct Option</span><select class="select" id="qCorrectOpt"><option value="A">Option A</option><option value="B">Option B</option><option value="C">Option C</option><option value="D">Option D</option></select></label>
+    </div>
+    <div class="msg bad" id="qErr" style="display:none;margin-top:10px"></div>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn" id="qCancel">Cancel</button>
+    <button class="btn primary" id="qSaveBtn">Save question</button>
+  </div>
+</dialog>
+
+<!-- Manage Pools Dialog -->
+<dialog id="dlgPools" class="wide">
+  <div class="dlg-body">
+    <h2 style="font-size:20px;letter-spacing:-.01em">Manage Private Question Pools</h2>
+    <p class="sub" style="margin:6px 0 16px">View, rename, or delete your private question pools. Deleting a pool removes all its private questions.</p>
+    <div id="poolsList" style="display:flex;flex-direction:column;gap:10px;max-height:360px;overflow-y:auto"></div>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn" id="closePools">Close</button>
+  </div>
+</dialog>
+
+
+<!-- UI Confirmation Dialog (replaces browser confirm) -->
+<dialog id="dlgConfirm" style="max-width:440px;border-radius:12px;padding:0;border:1px solid var(--line);box-shadow:0 16px 36px rgba(0,0,0,0.18)">
+  <div class="dlg-body" style="padding:22px 24px">
+    <h2 style="font-size:20px;letter-spacing:-.01em;margin:0 0 8px" id="confirmTitle">Confirm Action</h2>
+    <p class="sub" style="margin:0;font-size:14px;line-height:1.5" id="confirmMsg">Are you sure you want to proceed?</p>
+  </div>
+  <div class="dlg-foot" style="padding:14px 24px;background:var(--sunken);display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--line)">
+    <button class="btn" id="confirmCancel">Cancel</button>
+    <button class="btn" id="confirmOk">Confirm</button>
+  </div>
+</dialog>
+
+<!-- UI Prompt Dialog (replaces browser prompt) -->
+<dialog id="dlgPrompt" style="max-width:440px;border-radius:12px;padding:0;border:1px solid var(--line);box-shadow:0 16px 36px rgba(0,0,0,0.18)">
+  <div class="dlg-body" style="padding:22px 24px">
+    <h2 style="font-size:20px;letter-spacing:-.01em;margin:0 0 8px" id="promptTitle">Enter Information</h2>
+    <p class="sub" style="margin:0 0 14px;font-size:14px" id="promptMsg">Please provide the required value:</p>
+    <label class="field"><input class="input" id="promptInput" style="width:100%" placeholder="Type here..."></label>
+    <div class="msg bad" id="promptErr" style="display:none;margin-top:8px"></div>
+  </div>
+  <div class="dlg-foot" style="padding:14px 24px;background:var(--sunken);display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--line)">
+    <button class="btn" id="promptCancel">Cancel</button>
+    <button class="btn primary" id="promptOk">Save</button>
+  </div>
+</dialog>
+
+
+<!-- Subject-wise Restore Default Bank Dialog -->
+<dialog id="dlgRestoreBank" style="max-width:440px;border-radius:12px;padding:0;border:1px solid var(--line);box-shadow:0 16px 36px rgba(0,0,0,0.18)">
+  <div class="dlg-body" style="padding:22px 24px">
+    <h2 style="font-size:20px;letter-spacing:-.01em;margin:0 0 8px">Restore Default Question Bank</h2>
+    <p class="sub" style="margin:0 0 16px;font-size:14px;line-height:1.5">Choose which subject pool to restore from the university question bank. Your custom questions and private pools will remain intact.</p>
+    
+    <label class="field" style="margin-bottom:12px">
+      <span>Select Subject Pool</span>
+      <select class="select" id="restoreSubjectSelect">
+        <option value="all">All Default Subjects (OS &amp; DBMS)</option>
+        <option value="Operating Systems">Operating Systems only</option>
+        <option value="Database Management Systems">Database Management Systems only</option>
+      </select>
+    </label>
+    <div class="sub" style="font-size:12px;color:var(--muted)">Any missing default questions for the selected subject will be restored.</div>
+  </div>
+  <div class="dlg-foot" style="padding:14px 24px;background:var(--sunken);display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--line)">
+    <button class="btn" id="restoreCancel">Cancel</button>
+    <button class="btn primary" id="restoreOk">Restore Subject</button>
+  </div>
+</dialog>
+
+<!-- Teacher: View Student Submissions & Marks Dialog -->
+<dialog id="dlgSubmissions" class="wide" style="max-width:760px;border-radius:12px;padding:0;border:1px solid var(--line);box-shadow:0 16px 36px rgba(0,0,0,0.18)">
+  <div class="dlg-body" style="padding:22px 24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <h2 style="font-size:20px;letter-spacing:-.01em;margin:0" id="submExamTitle">Exam Submissions</h2>
+        <p class="sub" style="margin:4px 0 0" id="submExamMeta">Track student scores and test attempts.</p>
+      </div>
+      <a class="btn" id="submExportCsv" href="#" target="_blank">Export CSV</a>
+    </div>
+    <div class="scroll" style="max-height:380px;border:1px solid var(--line);border-radius:8px">
+      <table class="tbl" style="width:100%">
+        <thead>
+          <tr>
+            <th>Student ID</th>
+            <th>Total Marks</th>
+            <th>Correct / Total</th>
+            <th>Started At</th>
+            <th>Submitted At</th>
+            <th style="text-align:right">Action</th>
+          </tr>
+        </thead>
+        <tbody id="submRows"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="dlg-foot" style="padding:14px 24px;background:var(--sunken);display:flex;justify-content:flex-end;border-top:1px solid var(--line)">
+    <button class="btn primary" id="submClose">Close</button>
+  </div>
+</dialog>
+
+<!-- Teacher: Edit Exam Schedule Dialog -->
+<dialog id="dlgEditExam" style="max-width:520px;border-radius:12px;padding:0;border:1px solid var(--line);box-shadow:0 16px 36px rgba(0,0,0,0.18)">
+  <div class="dlg-body" style="padding:22px 24px">
+    <h2 style="font-size:20px;letter-spacing:-.01em;margin:0 0 4px">Edit Exam Schedule &amp; Access</h2>
+    <p class="sub" style="margin:0 0 16px;font-size:13px">Update the title, schedule window, or passkey for this exam.</p>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <input type="hidden" id="eeExamId">
+      <label class="field"><span>Exam Title</span><input class="input" id="eeTitle"></label>
+      <div class="grid g2" style="gap:10px">
+        <label class="field"><span>Start Time (Window Open)</span><input class="input" type="datetime-local" id="eeWinOpen"></label>
+        <label class="field"><span>End Time (Window Close)</span><input class="input" type="datetime-local" id="eeWinClose"></label>
+      </div>
+      <div class="grid g2" style="gap:10px">
+        <label class="field">
+          <span>Late Entry Cutoff (mins)</span>
+          <input class="input" type="number" id="eeLateMins" min="0" max="60">
+        </label>
+        <label class="field">
+          <span>Passkey / PIN</span>
+          <input class="input" id="eePasskey" style="font-family:monospace;text-transform:uppercase" maxlength="8">
+        </label>
+      </div>
+    </div>
+    <div class="msg bad" id="eeErr" style="display:none;margin-top:12px"></div>
+  </div>
+  <div class="dlg-foot" style="padding:14px 24px;background:var(--sunken);display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--line)">
+    <button class="btn" id="eeCancel">Cancel</button>
+    <button class="btn primary" id="eeSave">Save Changes</button>
+  </div>
+</dialog>
+
 <div class="toast" id="toast" hidden role="status"></div>
 
-<script src="ui-logic.js?v=2.1" type="module"></script>
+<script src="ui-logic.js?v=3.6" type="module"></script>
 </body>
 </html>
