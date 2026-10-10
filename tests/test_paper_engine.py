@@ -5,7 +5,7 @@ import pytest
 import sqlite3
 import sys
 import os
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from database import migrate_db, DB_FILE
 from paper_engine import validate_blueprint, generate_paper
