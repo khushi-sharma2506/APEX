@@ -1,5 +1,10 @@
+# Core Framework & Server
 fastapi
 uvicorn
+
+# Authentication & Form Handling
 bcrypt
 python-multipart
+
+# Testing
 pytest
