@@ -603,6 +603,11 @@ async function renderBank(){
 
   try {
     const res = await api.questions(params);
+    let questions = res.questions || [];
+
+    if (d) {
+      questions = questions.filter(r => r.diff_level === d);
+    }
     BANK = res.questions || [];
     
     $('#bankRows').innerHTML = BANK.length ? BANK.map(r=>`<tr>
