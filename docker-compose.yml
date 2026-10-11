@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  apex-engine:
+    build: .
+    container_name: apex_app
+    ports:
+      - "8000:8000"
+    volumes:
+      # Map the local db folder to persist SQLite database across container restarts
+      - ./db:/app/db
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
