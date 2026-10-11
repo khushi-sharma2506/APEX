@@ -416,8 +416,8 @@ pip install -r requirements.txt
 ### 3. Open in Browser
 Visit: **[http://127.0.0.1:8000/ui](http://127.0.0.1:8000/ui)**
 
-- **Teacher Credentials:** `teacher` / `teacher123`
-- **Student Credentials:** `student` / `student123`
+- **Teacher Credentials:** `teacher` / `pass123`
+- **Student Credentials:** `student` / `pass123`
 
 ---
 

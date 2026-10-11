@@ -32,6 +32,15 @@ def migrate_db():
             role TEXT NOT NULL CHECK(role IN ('student', 'teacher', 'admin'))
         )
     """)
+
+    # Seed default demonstration users if not present (password: pass123)
+    cursor.execute("""
+        INSERT OR IGNORE INTO users (username, password_hash, role)
+        VALUES 
+            ('student', '$2b$12$OF4uVgpuKJPGrI3euynInOpqGsfgmM8pMSDP009j9YaTHNvkadEoi', 'student'),
+            ('teacher', '$2b$12$OF4uVgpuKJPGrI3euynInOpqGsfgmM8pMSDP009j9YaTHNvkadEoi', 'teacher'),
+            ('admin',   '$2b$12$OF4uVgpuKJPGrI3euynInOpqGsfgmM8pMSDP009j9YaTHNvkadEoi', 'admin')
+    """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS auth_sessions (
             token TEXT PRIMARY KEY,
