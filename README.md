@@ -27,17 +27,23 @@ graph TD
 
 ```text
 APEX/
-├── db/                   # Contains the SQLite apex.db file
-├── data/                 # Raw mock_questions.csv datasets
-├── docs/                 # Project reports, diagrams, and presentations
+├── db/                   # questions_bank.csv raw seed dataset
+├── frontend/             # Single-page client UI (HTML5, Vanilla CSS/JS)
+│   ├── index.html        # Unified student & teacher application
+│   ├── style.css         # Modern, responsive stylesheet
+│   ├── ui-logic.js       # Dynamic client controller & session lifecycle
+│   └── api.js            # Unified REST client module
 ├── scripts/
-│   └── import_csv.py     # Data Ingestion & SQL Transaction scripts
+│   └── import_csv.py     # Data Ingestion & SQL Transaction script
 ├── src/
-│   ├── main.py           # Core FastAPI Server & OS Concurrency
-│   ├── database.py       # DB Connection & Schema Setup
+│   ├── main.py           # Core FastAPI Server & REST endpoints
+│   ├── database.py       # SQLite connection (WAL mode) & schema migration
 │   ├── cache.py          # LRU Memory Cache implementation
-│   └── blueprint.py      # Exam Blueprint Algorithm (Constraint Matching)
-└── requirements.txt      # Dependencies (fastapi, uvicorn)
+│   ├── paper_engine.py   # Constraint-based Blueprint question generator
+│   └── blueprint.py      # University paper layout generator
+├── tests/                # Test suite (cache, paper engine)
+├── start.bat             # One-click launcher script
+└── requirements.txt      # Core Python dependencies
 ```
 
 ## Quickstart & Local Setup
