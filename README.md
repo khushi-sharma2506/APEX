@@ -40,6 +40,23 @@ APEX/
 └── requirements.txt      # Dependencies (fastapi, uvicorn)
 ```
 
+## Quickstart & Local Setup
+
+1. **Install Dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Launch Application:**
+   - On Windows: Run `start.bat`
+   - Alternatively:
+     ```bash
+     python -m uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
+     ```
+
+3. **Access Interface:**
+   - Open browser at `http://127.0.0.1:8000/ui`
+
 ## Team Info
 
 **Team Lead:** Khushi Sharma
