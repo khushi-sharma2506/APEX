@@ -94,7 +94,7 @@ erDiagram
         INTEGER id PK
         TEXT username UK
         TEXT password_hash
-        TEXT role "student | teacher | admin"
+        TEXT role
     }
 
     AUTH_SESSIONS {
@@ -123,17 +123,17 @@ erDiagram
         TEXT question_text
         TEXT question_type
         INTEGER marks
-        TEXT diff_level "Easy | Medium | Hard"
+        TEXT diff_level
         BOOLEAN is_pyq
     }
 
     MCQ_OPTIONS {
-        INTEGER q_id PK_FK
+        INTEGER q_id PK
         TEXT opt_a
         TEXT opt_b
         TEXT opt_c
         TEXT opt_d
-        TEXT correct_opt "Kept Server-Side"
+        TEXT correct_opt
     }
 
     EXAMS {
@@ -142,7 +142,7 @@ erDiagram
         TEXT created_by
         INTEGER num_questions
         INTEGER duration_secs
-        TEXT mode "adaptive | fixed"
+        TEXT mode
         TEXT start_difficulty
         TEXT window_open
         TEXT window_close
@@ -207,7 +207,7 @@ erDiagram
         INTEGER bq_id FK
         TEXT part_label
         INTEGER topic_id FK
-        TEXT difficulty "Easy | Medium | Hard"
+        TEXT difficulty
     }
 
     GENERATED_PAPERS {
