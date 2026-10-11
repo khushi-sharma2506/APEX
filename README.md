@@ -19,52 +19,53 @@ Traditional examination workflows suffer from two major challenges:
 ## 🏛️ System Architecture
 
 ```mermaid
-flowchart TD
-    subgraph ClientLayer["Client Layer (SPA)"]
-        UI["Vanilla JS Single-Page App\n(HTML5 / CSS / ui-logic.js)"]
+flowchart LR
+    subgraph Client["1. Client Layer (SPA)"]
+        UI["Single Page App\n(HTML5 / CSS / Vanilla JS)"]
     end
 
-    subgraph ServerLayer["Application Server (FastAPI)"]
+    subgraph Server["2. FastAPI Application Server"]
+        direction TB
         Auth["Session Auth & RBAC\n(Cookie Token / Bcrypt)"]
-        EngineCAT["Adaptive Engine\n(Difficulty Stepping & Auto-Submit)"]
-        EnginePaper["Blueprint Paper Engine\n(Constraint Validation & Seeded Solver)"]
-        WorkerPool["Background Worker Threads\n(Predictive Prefetching)"]
+        CAT["Adaptive CAT Engine\n(Difficulty Stepping & Auto-Submit)"]
+        Blueprint["Blueprint Paper Engine\n(Constraint Validation & Solver)"]
+        Prefetch["Background Prefetch Worker\n(OS Predictive Threads)"]
     end
 
-    subgraph CacheLayer["In-Memory OS Layer"]
+    subgraph Memory["3. OS Memory Layer"]
         LRU["Custom LRU Cache\n(Thread-Safe OrderedDict)"]
     end
 
-    subgraph DataLayer["Persistence Layer (SQLite - WAL Mode)"]
-        DB[("apex.db (3NF Normalized Relational DB)")]
-        CSV["questions_bank.csv (Raw Seed Dataset)"]
+    subgraph Persistence["4. Storage Layer"]
+        DB[("SQLite Database\n(3NF - WAL Mode)")]
+        CSV["questions_bank.csv\n(Raw Seed Data)"]
     end
 
-    UI <-->|REST API / JSON| Auth
-    Auth --> EngineCAT
-    Auth --> EnginePaper
-    EngineCAT <-->|Check / Store| LRU
-    EngineCAT -.->|Async Prefetch Task| WorkerPool
-    WorkerPool --> DB
+    UI <-->|HTTP / REST| Auth
+    Auth --> CAT
+    Auth --> Blueprint
+    CAT <-->|Lookup / Write| LRU
+    CAT -.->|Async Trigger| Prefetch
+    Prefetch --> DB
     LRU -.->|Cache Miss| DB
-    EnginePaper <-->|Validate & Query| DB
-    CSV -->|scripts/import_csv.py| DB
+    Blueprint <-->|Constraint Queries| DB
+    CSV -->|import_csv.py| DB
 ```
 
 ---
 
-## 🗄️ Database Architecture & Schema
+## 🗄️ Database Architecture & Relational Schema
 
 APEX utilizes an SQLite database configured in **WAL (Write-Ahead Logging) mode** with foreign key constraints enabled for high-concurrency read/write operations during live tests.
 
-### Entity-Relationship Diagram (ERD)
+### 1. High-Level Entity-Relationship Model (ERD)
 
 ```mermaid
 erDiagram
-    users ||--o{ auth_sessions : "issues"
+    users ||--o{ auth_sessions : "authenticates"
     subjects ||--o{ topics : "contains"
     topics ||--o{ questions : "categorizes"
-    questions ||--|| mcq_options : "has"
+    questions ||--|| mcq_options : "has options"
     
     exams ||--o{ exam_topics : "covers"
     topics ||--o{ exam_topics : "included in"
@@ -77,50 +78,287 @@ erDiagram
     blueprint_questions ||--o{ blueprint_parts : "composed of"
     topics ||--o{ blueprint_parts : "targets"
     blueprints ||--o{ generated_papers : "generates"
-    generated_papers ||--o{ paper_parts : "includes"
+    generated_papers ||--o{ paper_parts : "assembles"
     questions ||--o{ paper_parts : "draws from"
 ```
 
-### Schema Details by Domain
+---
 
-#### 1. Identity & Access Management
-- **`users`**: Stores credentials and roles.
-  - `id` (INTEGER, PK), `username` (TEXT, UNIQUE), `password_hash` (TEXT), `role` (`student` | `teacher` | `admin`).
-- **`auth_sessions`**: Active authentication sessions.
-  - `token` (TEXT, PK), `username` (TEXT), `role` (TEXT), `created_at` (DATETIME), `expires_at` (DATETIME).
+### 2. Comprehensive Relational Schema Diagram (Tables, Columns & Keys)
 
-#### 2. Question Bank & Curriculum (3NF)
-- **`subjects`**: Course definitions.
-  - `subject_id` (INTEGER, PK), `subject_name` (TEXT, UNIQUE).
-- **`topics`**: Granular topics scoped to a syllabus unit.
-  - `topic_id` (INTEGER, PK), `subject_id` (FK -> `subjects`), `unit_number` (INTEGER), `topic_name` (TEXT).
-- **`questions`**: Core question bank entries.
-  - `q_id` (INTEGER, PK), `topic_id` (FK -> `topics`), `question_text` (TEXT), `question_type` (TEXT), `marks` (INTEGER), `diff_level` (`Easy` | `Medium` | `Hard`), `is_pyq` (BOOLEAN).
-  - *Index:* `idx_diff_topic` on `(diff_level, topic_id)` for high-speed difficulty matching.
-- **`mcq_options`**: 1-to-1 option mapping with hidden answer keys.
-  - `q_id` (INTEGER, PK, FK -> `questions`), `opt_a` (TEXT), `opt_b` (TEXT), `opt_c` (TEXT), `opt_d` (TEXT), `correct_opt` (TEXT, strictly kept server-side).
+The diagram below provides a complete overview of all tables, columns, primary keys (`PK`), foreign keys (`FK`), and inter-table relationships:
 
-#### 3. Online Adaptive Examinations
-- **`exams`**: Exam settings, timing, and security constraints.
-  - `exam_id` (INTEGER, PK), `title` (TEXT), `created_by` (TEXT), `num_questions` (INTEGER), `duration_secs` (INTEGER), `mode` (TEXT), `start_difficulty` (TEXT), `window_open` (TEXT), `window_close` (TEXT), `target_batch` (TEXT), `passkey` (TEXT), `late_entry_mins` (INTEGER), `max_attempts` (INTEGER), `results_released` (INTEGER), `review_level` (TEXT).
-- **`exam_topics`**: Many-to-many junction table between exams and allowed topics.
-  - `id` (INTEGER, PK), `exam_id` (FK -> `exams`), `topic_id` (FK -> `topics`), `UNIQUE(exam_id, topic_id)`.
-- **`student_sessions`**: Live test session state.
-  - `session_id` (INTEGER, PK), `student_id` (TEXT), `exam_id` (FK -> `exams`), `current_score` (INTEGER), `questions_seen` (TEXT), `current_difficulty` (TEXT), `started_at` (TEXT), `submitted_at` (TEXT).
-- **`session_responses`**: Student answers and automatic grading records.
-  - `response_id` (INTEGER, PK), `session_id` (FK -> `student_sessions`), `q_id` (FK -> `questions`), `chosen_opt` (TEXT), `is_correct` (INTEGER), `marks_awarded` (INTEGER), `answered_at` (TEXT), `UNIQUE(session_id, q_id)` to prevent duplicate submissions.
+```mermaid
+erDiagram
+    USERS {
+        INTEGER id PK
+        TEXT username UK
+        TEXT password_hash
+        TEXT role "student | teacher | admin"
+    }
 
-#### 4. Written Blueprint & Paper Generation Engine
-- **`blueprints`**: Teacher-defined structure for written offline examinations.
-  - `blueprint_id` (INTEGER, PK), `title` (TEXT), `subject_id` (FK -> `subjects`), `target_marks` (INTEGER), `created_by` (TEXT), `created_at` (TEXT).
-- **`blueprint_questions`**: Main question slot with choice mechanics (e.g., *Answer k out of n parts*).
-  - `bq_id` (INTEGER, PK), `blueprint_id` (FK -> `blueprints`), `q_no` (INTEGER), `unit_number` (INTEGER), `offered_n` (INTEGER), `attempt_k` (INTEGER), `marks_per_part` (INTEGER).
-- **`blueprint_parts`**: Sub-part constraints (e.g., part (a) must be Medium difficulty from Topic X).
-  - `bp_id` (INTEGER, PK), `bq_id` (FK -> `blueprint_questions`), `part_label` (TEXT), `topic_id` (FK -> `topics` or NULL for any topic in unit), `difficulty` (`Easy` | `Medium` | `Hard`).
-- **`generated_papers`**: Master generated offline test snapshots.
-  - `paper_id` (INTEGER, PK), `blueprint_id` (FK -> `blueprints`), `seed` (INTEGER), `blueprint_snap` (TEXT JSON), `generated_at` (TEXT).
-- **`paper_parts`**: Question mapping for deterministic paper reconstruction.
-  - `pp_id` (INTEGER, PK), `paper_id` (FK -> `generated_papers`), `q_no` (INTEGER), `part_label` (TEXT), `bank_question_id` (FK -> `questions`), `marks` (INTEGER).
+    AUTH_SESSIONS {
+        TEXT token PK
+        TEXT username
+        TEXT role
+        DATETIME created_at
+        DATETIME expires_at
+    }
+
+    SUBJECTS {
+        INTEGER subject_id PK
+        TEXT subject_name UK
+    }
+
+    TOPICS {
+        INTEGER topic_id PK
+        INTEGER subject_id FK
+        INTEGER unit_number
+        TEXT topic_name
+    }
+
+    QUESTIONS {
+        INTEGER q_id PK
+        INTEGER topic_id FK
+        TEXT question_text
+        TEXT question_type
+        INTEGER marks
+        TEXT diff_level "Easy | Medium | Hard"
+        BOOLEAN is_pyq
+    }
+
+    MCQ_OPTIONS {
+        INTEGER q_id PK_FK
+        TEXT opt_a
+        TEXT opt_b
+        TEXT opt_c
+        TEXT opt_d
+        TEXT correct_opt "Kept Server-Side"
+    }
+
+    EXAMS {
+        INTEGER exam_id PK
+        TEXT title
+        TEXT created_by
+        INTEGER num_questions
+        INTEGER duration_secs
+        TEXT mode "adaptive | fixed"
+        TEXT start_difficulty
+        TEXT window_open
+        TEXT window_close
+        TEXT target_batch
+        TEXT passkey
+        INTEGER late_entry_mins
+        INTEGER max_attempts
+        INTEGER results_released
+        TEXT review_level
+        DATETIME results_released_at
+        TEXT created_at
+    }
+
+    EXAM_TOPICS {
+        INTEGER id PK
+        INTEGER exam_id FK
+        INTEGER topic_id FK
+    }
+
+    STUDENT_SESSIONS {
+        INTEGER session_id PK
+        TEXT student_id
+        INTEGER exam_id FK
+        INTEGER current_score
+        TEXT questions_seen
+        TEXT current_difficulty
+        TEXT started_at
+        TEXT submitted_at
+    }
+
+    SESSION_RESPONSES {
+        INTEGER response_id PK
+        INTEGER session_id FK
+        INTEGER q_id FK
+        TEXT chosen_opt
+        INTEGER is_correct
+        INTEGER marks_awarded
+        TEXT answered_at
+    }
+
+    BLUEPRINTS {
+        INTEGER blueprint_id PK
+        TEXT title
+        INTEGER subject_id FK
+        INTEGER target_marks
+        TEXT created_by
+        TEXT created_at
+    }
+
+    BLUEPRINT_QUESTIONS {
+        INTEGER bq_id PK
+        INTEGER blueprint_id FK
+        INTEGER q_no
+        INTEGER unit_number
+        INTEGER offered_n
+        INTEGER attempt_k
+        INTEGER marks_per_part
+    }
+
+    BLUEPRINT_PARTS {
+        INTEGER bp_id PK
+        INTEGER bq_id FK
+        TEXT part_label
+        INTEGER topic_id FK
+        TEXT difficulty "Easy | Medium | Hard"
+    }
+
+    GENERATED_PAPERS {
+        INTEGER paper_id PK
+        INTEGER blueprint_id FK
+        INTEGER seed
+        TEXT blueprint_snap
+        TEXT generated_at
+    }
+
+    PAPER_PARTS {
+        INTEGER pp_id PK
+        INTEGER paper_id FK
+        INTEGER q_no
+        TEXT part_label
+        INTEGER bank_question_id FK
+        INTEGER marks
+    }
+
+    %% Relationships and Foreign Key Constraints
+    SUBJECTS ||--o{ TOPICS : "subject_id"
+    TOPICS ||--o{ QUESTIONS : "topic_id"
+    QUESTIONS ||--|| MCQ_OPTIONS : "q_id"
+
+    EXAMS ||--o{ EXAM_TOPICS : "exam_id"
+    TOPICS ||--o{ EXAM_TOPICS : "topic_id"
+    EXAMS ||--o{ STUDENT_SESSIONS : "exam_id"
+    STUDENT_SESSIONS ||--o{ SESSION_RESPONSES : "session_id"
+    QUESTIONS ||--o{ SESSION_RESPONSES : "q_id"
+
+    SUBJECTS ||--o{ BLUEPRINTS : "subject_id"
+    BLUEPRINTS ||--o{ BLUEPRINT_QUESTIONS : "blueprint_id"
+    BLUEPRINT_QUESTIONS ||--o{ BLUEPRINT_PARTS : "bq_id"
+    TOPICS ||--o{ BLUEPRINT_PARTS : "topic_id"
+    BLUEPRINTS ||--o{ GENERATED_PAPERS : "blueprint_id"
+    GENERATED_PAPERS ||--o{ PAPER_PARTS : "paper_id"
+    QUESTIONS ||--o{ PAPER_PARTS : "bank_question_id"
+```
+
+---
+
+### 3. Detailed Schema Tables Breakdown
+
+#### 🔐 Domain A: Authentication & Access Control
+| Table | Column Name | Data Type | Constraint | Description |
+|---|---|---|---|---|
+| **`users`** | `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Unique user identifier |
+| | `username` | TEXT | UNIQUE NOT NULL | User login identifier |
+| | `password_hash` | TEXT | NOT NULL | Salted bcrypt hash |
+| | `role` | TEXT | NOT NULL CHECK (in `'student'`, `'teacher'`, `'admin'`) | Access role |
+| **`auth_sessions`** | `token` | TEXT | PRIMARY KEY | Random 64-char secure token |
+| | `username` | TEXT | NOT NULL | User associated with token |
+| | `role` | TEXT | NOT NULL | Cached user role |
+| | `created_at` | DATETIME | DEFAULT CURRENT_TIMESTAMP | Login timestamp |
+| | `expires_at` | DATETIME | NOT NULL | Session expiry boundary |
+
+---
+
+#### 📚 Domain B: Question Bank & Curriculum (3NF)
+| Table | Column Name | Data Type | Constraint | Description |
+|---|---|---|---|---|
+| **`subjects`** | `subject_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Course identifier |
+| | `subject_name` | TEXT | UNIQUE NOT NULL | Course display name |
+| **`topics`** | `topic_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Topic identifier |
+| | `subject_id` | INTEGER | FOREIGN KEY -> `subjects(subject_id)` | Parent subject |
+| | `unit_number` | INTEGER | NOT NULL | Syllabus unit number (1 to 5) |
+| | `topic_name` | TEXT | NOT NULL | Topic description |
+| **`questions`** | `q_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Question bank identifier |
+| | `topic_id` | INTEGER | FOREIGN KEY -> `topics(topic_id)` | Associated topic |
+| | `question_text`| TEXT | NOT NULL | Full question text/prompt |
+| | `question_type`| TEXT | NOT NULL | `'MCQ'` or `'Subjective'` |
+| | `marks` | INTEGER | NOT NULL | Weightage (e.g. 1, 2, 5, 10) |
+| | `diff_level` | TEXT | NOT NULL (`'Easy'`, `'Medium'`, `'Hard'`) | Calibrated difficulty |
+| | `is_pyq` | BOOLEAN | DEFAULT 0 | Previous Year Question flag |
+| *(Index)* | `idx_diff_topic`| INDEX | ON `questions(diff_level, topic_id)` | High-speed matching |
+| **`mcq_options`** | `q_id` | INTEGER | PRIMARY KEY, FK -> `questions(q_id)` | 1-to-1 option mapping |
+| | `opt_a` / `opt_b` / `opt_c` / `opt_d` | TEXT | NULLABLE | Multiple choice option texts |
+| | `correct_opt` | TEXT | NULLABLE (Never exposed to student API) | Answer key (`A`, `B`, `C`, `D`) |
+
+---
+
+#### ⏱️ Domain C: Online Adaptive Testing (CAT)
+| Table | Column Name | Data Type | Constraint | Description |
+|---|---|---|---|---|
+| **`exams`** | `exam_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Exam identifier |
+| | `title` | TEXT | NOT NULL | Exam name |
+| | `created_by` | TEXT | NOT NULL DEFAULT 'teacher' | Author username |
+| | `num_questions`| INTEGER | NOT NULL DEFAULT 20 | Exam total question count |
+| | `duration_secs`| INTEGER | NOT NULL DEFAULT 1800 | Exam timer limit in seconds |
+| | `mode` | TEXT | NOT NULL DEFAULT 'adaptive' | `'adaptive'` or `'fixed'` |
+| | `start_difficulty`| TEXT | DEFAULT 'Medium' | Initial question difficulty |
+| | `window_open` / `window_close` | TEXT | ISO Timestamp strings | Allowed examination window |
+| | `target_batch` | TEXT | DEFAULT 'All' | Candidate batch filter |
+| | `passkey` | TEXT | NULLABLE | Room PIN / Secret Passkey |
+| | `late_entry_mins`| INTEGER | DEFAULT 15 | Late admission window limit |
+| | `max_attempts` | INTEGER | DEFAULT 1 | Attempt cap per student |
+| | `results_released`| INTEGER | DEFAULT 0 | Visibility status (0=Locked, 1=Released) |
+| | `review_level` | TEXT | DEFAULT 'score_and_correctness' | Results granularity control |
+| **`exam_topics`** | `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Junction entry identifier |
+| | `exam_id` | INTEGER | FK -> `exams(exam_id)` | Selected exam |
+| | `topic_id` | INTEGER | FK -> `topics(topic_id)` | Included topic (`UNIQUE(exam_id, topic_id)`) |
+| **`student_sessions`** | `session_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Live test attempt record |
+| | `student_id` | TEXT | NOT NULL | Candidate username |
+| | `exam_id` | INTEGER | FK -> `exams(exam_id)` | Target exam |
+| | `current_score`| INTEGER | DEFAULT 0 | Running score |
+| | `questions_seen`| TEXT | DEFAULT '' | Comma-delimited list of served `q_id`s |
+| | `current_difficulty`| TEXT| DEFAULT 'Medium' | Dynamic difficulty state |
+| | `started_at` | TEXT | ISO Timestamp | Start timestamp |
+| | `submitted_at` | TEXT | ISO Timestamp | Completion timestamp |
+| **`session_responses`**| `response_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Individual answer log |
+| | `session_id` | INTEGER | FK -> `student_sessions(session_id)` | Associated session |
+| | `q_id` | INTEGER | FK -> `questions(q_id)` | Question answered |
+| | `chosen_opt` | TEXT | NOT NULL | Selected choice (`A`, `B`, `C`, `D`) |
+| | `is_correct` | INTEGER | NOT NULL (0 or 1) | Automatic grading flag |
+| | `marks_awarded`| INTEGER | NOT NULL | Points credited |
+| | `answered_at` | TEXT | DEFAULT `(datetime('now'))` | Submission timestamp |
+| *(Constraint)* | `UNIQUE` | | `UNIQUE(session_id, q_id)` | Prevents duplicate answers |
+
+---
+
+#### 📝 Domain D: Written Blueprint & Generation Engine
+| Table | Column Name | Data Type | Constraint | Description |
+|---|---|---|---|---|
+| **`blueprints`** | `blueprint_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Template identifier |
+| | `title` | TEXT | NOT NULL | Blueprint title (e.g., *Mid-Sem Exam*) |
+| | `subject_id` | INTEGER | FK -> `subjects(subject_id)` | Target subject |
+| | `target_marks` | INTEGER | NULLABLE | Enforced total marks limit |
+| | `created_by` | TEXT | NOT NULL | Teacher author |
+| | `created_at` | TEXT | DEFAULT `(datetime('now'))` | Creation timestamp |
+| **`blueprint_questions`** | `bq_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Main question slot |
+| | `blueprint_id`| INTEGER | FK -> `blueprints(blueprint_id)` | Parent blueprint |
+| | `q_no` | INTEGER | NOT NULL | Question number (1, 2, 3...) |
+| | `unit_number` | INTEGER | NOT NULL | Syllabus unit restriction |
+| | `offered_n` | INTEGER | CHECK (`offered_n >= 1`) | Total sub-parts given |
+| | `attempt_k` | INTEGER | CHECK (`attempt_k <= offered_n`) | Sub-parts student must answer |
+| | `marks_per_part`| INTEGER| CHECK (`marks_per_part >= 1`) | Marks per attempted part |
+| **`blueprint_parts`** | `bp_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Part specification |
+| | `bq_id` | INTEGER | FK -> `blueprint_questions(bq_id)` | Parent question slot |
+| | `part_label` | TEXT | NOT NULL | Label (`a`, `b`, `c`, `d`) |
+| | `topic_id` | INTEGER | NULLABLE (FK -> `topics(topic_id)`) | Specific topic (or NULL for any in unit) |
+| | `difficulty` | TEXT | NOT NULL (`'Easy'`, `'Medium'`, `'Hard'`) | Part difficulty |
+| **`generated_papers`** | `paper_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Generated paper instance |
+| | `blueprint_id`| INTEGER | FK -> `blueprints(blueprint_id)` | Source template |
+| | `seed` | INTEGER | NOT NULL | Random seed for exact reproducibility |
+| | `blueprint_snap`| TEXT | NOT NULL (JSON) | Blueprint configuration snapshot |
+| | `generated_at`| TEXT | DEFAULT `(datetime('now'))` | Generation timestamp |
+| **`paper_parts`** | `pp_id` | INTEGER | PRIMARY KEY AUTOINCREMENT | Generated question part map |
+| | `paper_id` | INTEGER | FK -> `generated_papers(paper_id)` | Generated paper instance |
+| | `q_no` / `part_label` | INTEGER / TEXT | NOT NULL | Slot label mapping |
+| | `bank_question_id`| INTEGER | FK -> `questions(q_id)` | Drawn bank question |
+| | `marks` | INTEGER | NOT NULL | Allocated marks |
 
 ---
 
