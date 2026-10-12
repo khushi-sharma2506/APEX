@@ -7,3 +7,4 @@ db/apex.db
 *.db-wal
 *.db-shm
 .env
+repomix-output.xml

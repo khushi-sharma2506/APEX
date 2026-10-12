@@ -100,7 +100,8 @@ function renderNav(){
 function go(v){
   view=v; $$('.view').forEach(s=>s.hidden = s.id!=='view-'+v); renderNav(); $('.main').scrollTop=0;
   v==='perf' ? perfStart() : perfStop();
-  if(v==='tdash') renderTDash(); if(v==='texams') renderTExams(); if(v==='results') renderResults(); if(v==='bank') { loadBankSubjects(); renderBank(); } if(v==='exams') renderExams();
+  if(v==='tdash') renderTDash(); if(v==='texams') renderTExams(); if(v==='results') renderResults(); if(v==='bank') { loadBankSubjects(); renderBank(); } if(v==='exams') renderExams();if(v==='blueprint') { initBlueprint(); 
+}
 }
 function setRole(r){ role=r; go(NAV[r][0][0]); }
 $('#nav').addEventListener('click',e=>{const b=e.target.closest('[data-view]'); if(b) go(b.dataset.view)});

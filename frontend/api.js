@@ -15,11 +15,17 @@ async function req(method, path, params = null, body = null) {
     opts.headers["Content-Type"] = "application/json";
   }
   const res = await fetch(url, opts);
-  if (!res.ok) {
+ if (!res.ok) {
     let msg = `HTTP ${res.status}`;
     try {
       const e = await res.json();
-      msg = e.detail || msg;
+      if (Array.isArray(e.detail)) {
+        msg = e.detail.map(d => `${d.loc ? d.loc.slice(-1) + ': ' : ''}${d.msg}`).join(', ');
+      } else if (typeof e.detail === 'object' && e.detail !== null) {
+        msg = JSON.stringify(e.detail);
+      } else {
+        msg = e.detail || msg;
+      }
     } catch {}
     throw new Error(msg);
   }

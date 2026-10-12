@@ -122,7 +122,7 @@ def read_root():
 @app.get("/subjects")
 def get_subjects(user: dict = Depends(get_current_user)):
     conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM subjects WHERE is_private=0 OR owner=? ORDER BY subject_name", (user['username'],)).fetchall()
+    rows = conn.execute("SELECT * FROM subjects ORDER BY subject_name").fetchall()
     conn.close()
     return [dict(r) for r in rows]
 

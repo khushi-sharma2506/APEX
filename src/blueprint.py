@@ -15,11 +15,20 @@ def get_question_by_marks(cursor, marks, topic_id, require_pyq=False):
     cursor.execute(query, params)
     row = cursor.fetchone()
     
+    # If no PYQ found, fallback to any question of the same marks
     if not row and require_pyq:
-        cursor.execute("SELECT * FROM questions WHERE marks = ? AND topic_id = ? ORDER BY RANDOM() LIMIT 1", [marks, topic_id])
+        cursor.execute(
+            "SELECT * FROM questions WHERE marks = ? AND topic_id = ? ORDER BY RANDOM() LIMIT 1",
+            [marks, topic_id]
+        )
         row = cursor.fetchone()
         
-    return dict(row) if row else {"question_text": f"Error: No {marks}-mark question found.", "marks": marks}
+    if row:
+        return dict(row)
+    return {
+        "question_text": f"Error: No {marks}-mark question found.",
+        "marks": marks
+    }
 
 def generate_university_paper(num_main_questions=3):
     """
@@ -37,6 +46,7 @@ def generate_university_paper(num_main_questions=3):
     topics = [dict(t) for t in cursor.fetchall()]
     
     if not topics:
+        conn.close()
         return {"error": "Database is empty. Please run database.py to initialize data."}
     
     paper = []
