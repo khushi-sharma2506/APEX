@@ -1,16 +1,22 @@
 import sqlite3
 import os
-
+#this is made by rohit sharma
+# Define database file path relative to the script directory
 DB_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "apex.db")
 
+# Supported difficulty progression levels for adaptive assessments
 DIFFICULTY_LEVELS = ["Easy", "Medium", "Hard"]
 
 
 def get_db_connection():
+    """
+    Establishes and returns a configured SQLite database connection.
+    Applies performance optimizations (WAL mode, busy timeouts, and foreign key enforcement).
+    """
     conn = sqlite3.connect(DB_FILE, timeout=10.0)
-    conn.row_factory = sqlite3.Row
+    conn.row_factory = sqlite3.Row  # Enables column access by name
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA journal_mode = WAL")  # Write-Ahead Logging for concurrency
     conn.execute("PRAGMA synchronous = NORMAL")
     conn.execute("PRAGMA busy_timeout = 5000")
     return conn
@@ -24,6 +30,7 @@ def migrate_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
 
+    # User management table for role-based authentication (student, teacher, admin)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,6 +48,8 @@ def migrate_db():
             ('teacher', '$2b$12$OF4uVgpuKJPGrI3euynInOpqGsfgmM8pMSDP009j9YaTHNvkadEoi', 'teacher'),
             ('admin',   '$2b$12$OF4uVgpuKJPGrI3euynInOpqGsfgmM8pMSDP009j9YaTHNvkadEoi', 'admin')
     """)
+    
+    # Session tokens for authenticated users
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS auth_sessions (
             token TEXT PRIMARY KEY,
@@ -51,12 +60,15 @@ def migrate_db():
         )
     """)
 
+    # Academic subjects catalog
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS subjects (
             subject_id   INTEGER PRIMARY KEY AUTOINCREMENT,
             subject_name TEXT NOT NULL UNIQUE
         )
     """)
+    
+    # Topics mapped to subjects and course units
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS topics (
             topic_id    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +78,8 @@ def migrate_db():
             FOREIGN KEY (subject_id) REFERENCES subjects (subject_id)
         )
     """)
+    
+    # Core question bank repository
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS questions (
             q_id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +92,8 @@ def migrate_db():
             FOREIGN KEY (topic_id) REFERENCES topics (topic_id)
         )
     """)
+    
+    # Multiple choice question options and correct answers
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS mcq_options (
             q_id        INTEGER PRIMARY KEY,
@@ -89,33 +105,39 @@ def migrate_db():
             FOREIGN KEY (q_id) REFERENCES questions (q_id)
         )
     """)
+    
+    # Performance index for adaptive filtering
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_diff_topic ON questions(diff_level, topic_id)"
     )
 
+    # Exam configuration parameters
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS exams (
-            exam_id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            title            TEXT NOT NULL,
-            created_by       TEXT NOT NULL DEFAULT 'teacher',
-            num_questions    INTEGER NOT NULL DEFAULT 20,
-            duration_secs    INTEGER NOT NULL DEFAULT 1800,
-            mode             TEXT NOT NULL DEFAULT 'adaptive',
-            start_difficulty TEXT NOT NULL DEFAULT 'Medium',
-            results_released INTEGER NOT NULL DEFAULT 0,
-            review_level     TEXT DEFAULT 'score_and_correctness',
+            exam_id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            title              TEXT NOT NULL,
+            created_by         TEXT NOT NULL DEFAULT 'teacher',
+            num_questions      INTEGER NOT NULL DEFAULT 20,
+            duration_secs      INTEGER NOT NULL DEFAULT 1800,
+            mode               TEXT NOT NULL DEFAULT 'adaptive',
+            start_difficulty   TEXT NOT NULL DEFAULT 'Medium',
+            results_released   INTEGER NOT NULL DEFAULT 0,
+            review_level       TEXT DEFAULT 'score_and_correctness',
             results_released_at DATETIME,
-            created_at       TEXT DEFAULT (datetime('now'))
+            created_at         TEXT DEFAULT (datetime('now'))
         )
     """)
+    
+    # Safe column additions for existing exams table schemas
     try: cursor.execute("ALTER TABLE exams ADD COLUMN review_level TEXT DEFAULT 'score_and_correctness'")
     except sqlite3.OperationalError: pass
     try: cursor.execute("ALTER TABLE exams ADD COLUMN results_released_at DATETIME")
     except sqlite3.OperationalError: pass
 
+    # Exam-to-topic mapping relations
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS exam_topics (
-            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            id      INTEGER PRIMARY KEY AUTOINCREMENT,
             exam_id  INTEGER NOT NULL,
             topic_id INTEGER NOT NULL,
             UNIQUE (exam_id, topic_id),
@@ -124,6 +146,7 @@ def migrate_db():
         )
     """)
 
+    # Active student testing sessions tracking progress and adaptive levels
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS student_sessions (
             session_id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,6 +160,7 @@ def migrate_db():
         )
     """)
 
+    # Ensure schema updates for student sessions
     for col_def in [
         ("exam_id",            "INTEGER"),
         ("current_difficulty", "TEXT DEFAULT 'Medium'"),
@@ -149,6 +173,7 @@ def migrate_db():
         except Exception:
             pass  # column already exists — skip
 
+    # Recording student responses per question during an assessment
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS session_responses (
             response_id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,6 +189,7 @@ def migrate_db():
         )
     """)
 
+    # Additional scheduling and batch constraints for exams
     try: cursor.execute("ALTER TABLE exams ADD COLUMN window_open TEXT")
     except sqlite3.OperationalError: pass
     try: cursor.execute("ALTER TABLE exams ADD COLUMN window_close TEXT")
@@ -175,6 +201,7 @@ def migrate_db():
     try: cursor.execute("ALTER TABLE student_sessions ADD COLUMN started_at TEXT")
     except sqlite3.OperationalError: pass
 
+    # Question paper blueprints structure
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS blueprints (
           blueprint_id  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,6 +214,7 @@ def migrate_db():
         )
     """)
 
+    # Blueprint breakdown questions definition
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS blueprint_questions (
           bq_id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,6 +230,7 @@ def migrate_db():
         )
     """)
 
+    # Blueprint sub-parts configuration
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS blueprint_parts (
           bp_id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,17 +243,19 @@ def migrate_db():
         )
     """)
 
+    # Generated final question papers repository
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS generated_papers (
-          paper_id       INTEGER PRIMARY KEY AUTOINCREMENT,
-          blueprint_id   INTEGER NOT NULL,
-          seed           INTEGER NOT NULL,
+          paper_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+          blueprint_id  INTEGER NOT NULL,
+          seed          INTEGER NOT NULL,
           blueprint_snap TEXT NOT NULL,   -- JSON snapshot of blueprint at generation time
-          generated_at   TEXT DEFAULT (datetime('now')),
+          generated_at  TEXT DEFAULT (datetime('now')),
           FOREIGN KEY (blueprint_id) REFERENCES blueprints(blueprint_id)
         )
     """)
 
+    # Mapping of generated paper parts to actual bank questions
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS paper_parts (
           pp_id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -245,14 +276,14 @@ def migrate_db():
 
 
 def advance_difficulty(current: str, is_correct: bool) -> str:
-    """Move one level harder on correct, one easier on wrong; clamp to Easy-Hard."""
+    """Move one level harder on correct, one easier on wrong; clamp to Easy-Hard limits."""
     idx = DIFFICULTY_LEVELS.index(current) if current in DIFFICULTY_LEVELS else 1
     idx = min(2, idx + 1) if is_correct else max(0, idx - 1)
     return DIFFICULTY_LEVELS[idx]
 
 
 def init_db():
-    """Full reset — only for development. Wipes all data."""
+    """Full database reset — development only. Wipes all existing tables and data."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     for tbl in ["session_responses", "mcq_options", "student_sessions",
