@@ -110,6 +110,10 @@ $('#nav').addEventListener('click',e=>{const b=e.target.closest('[data-view]'); 
 const ROLE_LABEL={student:'Student',teacher:'Teacher',admin:'Admin'};
 function enterApp(r,name){
   user={role:r,name}; $('#landing').hidden=true; $('#login').hidden=true; $('#appShell').hidden=false;
+  const aiw = document.getElementById('aiChatWidget');
+  if (aiw) aiw.hidden = false;
+  const logs = document.getElementById('aiChatLogs');
+  if (logs) logs.innerHTML = `<div class="ai-msg bot">Hello <b>${name}</b>! 👋 How can I help you today?</div>`;
   $('#uName').textContent=name; $('#uRole').textContent=ROLE_LABEL[r]; $('#uAv').textContent=r==='student'?'S':name.charAt(0).toUpperCase();
   setRole(r);
 }
@@ -128,7 +132,13 @@ async function boot() {
 }
 
 async function logout(){
-  closeExam(); perfStop(); user=null; 
+  closeExam(); perfStop(); user=null;
+    const aiw = document.getElementById('aiChatWidget');
+    if (aiw) aiw.hidden = true;
+    const win = document.getElementById('aiChatWindow');
+    if (win) win.hidden = true;
+    const logs = document.getElementById('aiChatLogs');
+    if (logs) logs.innerHTML = '<div class="ai-msg bot">Hello! 👋 How can I help you today?</div>'; 
   try { await api.logout(); } catch(e){}
   $('#appShell').hidden=true; $('#login').hidden=true; $('#landing').hidden=false; $('#landing').scrollTop=0; toast('You have been signed out.');
 }
@@ -419,6 +429,12 @@ async function startLiveExamSession(sess, isPreview = false) {
   $('#exFoot').hidden = false;
   paintTimer();
 
+  // Academic Integrity: Strictly hide AI Assistant widget while an exam is actively running
+  const aiw = document.getElementById('aiChatWidget');
+  if (aiw) aiw.hidden = true;
+  const aiWin = document.getElementById('aiChatWindow');
+  if (aiWin) aiWin.hidden = true;
+
   clearInterval(ex.t);
   ex.t = setInterval(() => {
     ex.left--;
@@ -561,6 +577,10 @@ async function closeExam() {
   $('#exam').hidden = true;
   ex = null;
   renderExams();
+
+  // Restore AI Assistant widget after exam session concludes
+  const aiw = document.getElementById('aiChatWidget');
+  if (aiw && user) aiw.hidden = false;
 }
 $('#exExit').onclick = closeExam;
 $('#exBody').addEventListener('click', e => {
@@ -2018,3 +2038,74 @@ $('#btnDownloadTemplate')?.addEventListener('click', (e) => {
   URL.revokeObjectURL(url);
   toast("Sample CSV template downloaded!");
 });
+
+
+/* ===== Phase 3: AI Assistant Widget Client Logic ===== */
+const aiToggle = $('#aiChatToggle');
+const aiWindow = $('#aiChatWindow');
+const aiClose = $('#aiChatClose');
+const aiForm = $('#aiChatForm');
+const aiInput = $('#aiChatInput');
+const aiLogs = $('#aiChatLogs');
+const aiQuick = $('#aiQuickActions');
+
+if (aiToggle && aiWindow) {
+  aiToggle.addEventListener('click', () => {
+    const isHidden = aiWindow.hidden;
+    aiWindow.hidden = !isHidden;
+    if (!aiWindow.hidden) {
+      aiInput?.focus();
+      aiLogs.scrollTop = aiLogs.scrollHeight;
+    }
+  });
+
+  aiClose?.addEventListener('click', () => {
+    aiWindow.hidden = true;
+  });
+
+  aiQuick?.addEventListener('click', (e) => {
+    const chip = e.target.closest('.ai-chip');
+    if (chip && chip.dataset.prompt) {
+      aiInput.value = chip.dataset.prompt;
+      aiForm.dispatchEvent(new Event('submit', { cancelable: true }));
+    }
+  });
+
+  aiForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = aiInput.value.trim();
+    if (!msg) return;
+
+    // Append user message
+    const uMsg = document.createElement('div');
+    uMsg.className = 'ai-msg user';
+    uMsg.textContent = msg;
+    aiLogs.appendChild(uMsg);
+    aiInput.value = '';
+    aiLogs.scrollTop = aiLogs.scrollHeight;
+
+    // Append typing indicator
+    const botMsg = document.createElement('div');
+    botMsg.className = 'ai-msg bot';
+    botMsg.innerHTML = '<i>Thinking...</i>';
+    aiLogs.appendChild(botMsg);
+    aiLogs.scrollTop = aiLogs.scrollHeight;
+
+    try {
+      const res = await api.chat(msg, { user: user?.name, role: user?.role });
+      
+      // Format markdown-like responses (bold, lists, headers)
+      let formatted = (res.reply || 'No response.')
+        .replace(/### (.*?)\n/g, '<h3>$1</h3>')
+        .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+        .replace(/\*(.*?)\*/g, '<i>$1</i>')
+        .replace(/\n/g, '<br>');
+      
+      botMsg.innerHTML = formatted;
+    } catch (err) {
+      botMsg.innerHTML = `<span style="color:var(--bad)">Error: ${err.message || 'Could not connect to assistant'}</span>`;
+    } finally {
+      aiLogs.scrollTop = aiLogs.scrollHeight;
+    }
+  });
+}

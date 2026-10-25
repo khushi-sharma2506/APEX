@@ -94,4 +94,5 @@ export const api = {
 
   cacheStats: () => req("GET", "/cache/stats"),
   cacheReset: () => req("POST", "/cache/reset"),
+  chat: (message, context = null) => req("POST", "/chat", null, { message, context }),
 };
