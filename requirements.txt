@@ -2,6 +2,9 @@
 fastapi
 uvicorn
 
+# Environment Configuration
+python-dotenv
+
 # Authentication & Form Handling
 bcrypt
 python-multipart

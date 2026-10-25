@@ -13,6 +13,7 @@ Traditional examination workflows suffer from two major challenges:
 **APEX** addresses these challenges via a unified dual-engine architecture:
 - **Live Adaptive Testing Engine (Computer-Adaptive Testing - CAT):** Leverages an in-memory LRU cache and predictive prefetching to deliver real-time, difficulty-adjusting questions with sub-second latency. Includes exam window scheduling, room PIN/passkey security, late entry cutoffs, and single-attempt enforcement.
 - **Offline Exam Paper Generator:** Uses a constraint-satisfaction algorithm with backtracking and random seeding to instantly assemble multi-part university question papers from a normalized question bank.
+- **Academic AI Assistant (NLP Engine):** Powered by Google Gemini (`gemini-3.5-flash`), providing context-aware academic guidance. For students, it provides algorithmic and theoretical explanations; for teachers, it drafts new MCQs and subjective test questions. Features strict anti-cheating controls that automatically lock down and hide the assistant during active exam sessions.
 
 ---
 
@@ -30,6 +31,7 @@ flowchart LR
         CAT["Adaptive CAT Engine\n(Difficulty Stepping & Auto-Submit)"]
         Blueprint["Blueprint Paper Engine\n(Constraint Validation & Solver)"]
         Prefetch["Background Prefetch Worker\n(OS Predictive Threads)"]
+        Assistant["AI Assistant Module\n(Gemini REST Engine / Anti-Cheat)"]
     end
 
     subgraph Memory["3. OS Memory Layer"]
@@ -49,6 +51,8 @@ flowchart LR
     Prefetch --> DB
     LRU -.->|Cache Miss| DB
     Blueprint <-->|Constraint Queries| DB
+    Auth --> Assistant
+    Assistant -.->|REST API| Gemini["Google Gemini API\n(gemini-3.5-flash)"]
     CSV -->|import_csv.py| DB
 ```
 
@@ -388,11 +392,13 @@ APEX/
 │   └── import_csv.py     # Data Ingestion & SQL Transaction script
 ├── src/
 │   ├── main.py           # Core FastAPI Server & REST endpoints
+│   ├── assistant.py      # Google Gemini Academic Assistant & prompt orchestration
 │   ├── database.py       # SQLite connection (WAL mode) & schema migration
 │   ├── cache.py          # LRU Memory Cache implementation
 │   ├── paper_engine.py   # Constraint-based Blueprint question generator
 │   └── blueprint.py      # University paper layout generator
-├── tests/                # Unit & regression tests (cache, paper engine)
+├── tests/                # Unit & regression tests (cache, paper engine, assistant)
+├── .env.example          # Environment variables template
 ├── start.bat             # One-click launcher script
 └── requirements.txt      # Core Python dependencies
 ```
@@ -406,7 +412,14 @@ APEX/
 pip install -r requirements.txt
 ```
 
-### 2. Launch the Application
+### 2. Configure Environment Variables
+Copy `.env.example` to `.env` and add your Google Gemini API Key:
+```bash
+cp .env.example .env
+# Open .env and insert: GEMINI_API_KEY=your_gemini_api_key
+```
+
+### 3. Launch the Application
 - **Windows (Recommended):** Double-click or run `start.bat`
 - **Manual Launch:**
   ```bash
