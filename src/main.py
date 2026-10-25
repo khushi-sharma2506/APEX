@@ -15,6 +15,9 @@ from concurrent.futures import ThreadPoolExecutor
 import bcrypt
 import uuid
 import sys
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Ensure src/ folder is in sys.path so modules like database, cache, etc. are found from anywhere
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -94,6 +97,20 @@ def get_current_user(apex_session: Optional[str] = Cookie(None)):
     if not session:
         raise HTTPException(401, "Session expired or invalid")
     return dict(session)
+
+def get_optional_user(apex_session: Optional[str] = Cookie(None)):
+    if not apex_session:
+        return None
+    try:
+        conn = get_db_connection()
+        session = conn.execute(
+            "SELECT * FROM auth_sessions WHERE token=? AND expires_at > datetime('now')", 
+            (apex_session,)
+        ).fetchone()
+        conn.close()
+        return dict(session) if session else None
+    except Exception:
+        return None
 
 def require_role(user: dict, allowed_roles: List[str]):
     if user["role"] not in allowed_roles:
@@ -1538,6 +1555,18 @@ def reset_default_bank(subject_name: Optional[str] = None, user: dict = Depends(
         "skipped": result["skipped"],
         "message": f"Bank synchronized: {result['imported']} restored, {result['skipped']} existing questions kept."
     }
+
+
+
+class ChatRequest(BaseModel):
+    message: str
+    context: Optional[dict] = None
+
+@app.post("/chat")
+def chat_assistant(req: ChatRequest, user: Optional[dict] = Depends(get_optional_user)):
+    from assistant import process_chat
+    role = user["role"] if user else "student"
+    return process_chat(req.message, user_role=role, context=req.context)
 
 
 if os.path.isdir(_frontend):
