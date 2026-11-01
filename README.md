@@ -1,5 +1,15 @@
 # Adaptive Paper Engine for eXaminations (APEX)
 
+[![Live Demo](https://img.shields.io/badge/Demo-Live%20on%20Render-brightgreen?style=for-the-badge&logo=render)](https://apex-q0dt.onrender.com/ui/)
+[![Python](https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge&logo=python)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-teal?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Gemini](https://img.shields.io/badge/Google%20Gemini-3.5--flash--lite-orange?style=for-the-badge&logo=google)](https://aistudio.google.com/)
+
+> 🌐 **Live Public Deployment:** **[https://apex-q0dt.onrender.com/ui/](https://apex-q0dt.onrender.com/ui/)**
+> 
+> - **Teacher Demo:** `teacher` / `pass123`
+> - **Student Demo:** `student` / `pass123`
+
 An OS-Optimized Institutional Assessment and Dynamic Question Bank Generator. This is a combined Project-Based Learning (PBL) project integrating **Operating Systems (OS)** concurrency concepts and **Database Management Systems (DBMS)** 3NF relational design.
 
 ---
