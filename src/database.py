@@ -272,6 +272,61 @@ def migrate_db():
 
     conn.commit()
     conn.close()
+    # Auto-seed question bank from CSV if questions table is empty (e.g. fresh cloud deployment)
+    cursor.execute("SELECT COUNT(*) FROM questions")
+    q_count = cursor.fetchone()[0]
+    if q_count == 0:
+        csv_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "db", "questions_bank.csv")
+        if os.path.exists(csv_path):
+            import csv
+            print(f"Empty question bank detected. Auto-seeding from {csv_path}...")
+            with open(csv_path, 'r', encoding='utf-8-sig') as f:
+                reader = csv.DictReader(f)
+                seeded = 0
+                for row in reader:
+                    # 1. Subject
+                    cursor.execute("SELECT subject_id FROM subjects WHERE subject_name = ?", (row['subject_name'],))
+                    res = cursor.fetchone()
+                    if res:
+                        sub_id = res[0]
+                    else:
+                        cursor.execute("INSERT INTO subjects (subject_name) VALUES (?)", (row['subject_name'],))
+                        sub_id = cursor.lastrowid
+
+                    # 2. Topic
+                    cursor.execute(
+                        "SELECT topic_id FROM topics WHERE topic_name = ? AND subject_id = ? AND unit_number = ?",
+                        (row['topic_name'], sub_id, row['unit_number'])
+                    )
+                    res = cursor.fetchone()
+                    if res:
+                        top_id = res[0]
+                    else:
+                        cursor.execute(
+                            "INSERT INTO topics (subject_id, unit_number, topic_name) VALUES (?, ?, ?)",
+                            (sub_id, row['unit_number'], row['topic_name'])
+                        )
+                        top_id = cursor.lastrowid
+
+                    # 3. Question
+                    cursor.execute("""
+                        INSERT INTO questions (topic_id, question_text, question_type, marks, diff_level, is_pyq)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (top_id, row['question_text'], row['question_type'], row['marks'], row['diff_level'], row['is_pyq']))
+                    q_id = cursor.lastrowid
+
+                    # 4. MCQ Options
+                    if row['question_type'].strip().upper() == 'MCQ':
+                        cursor.execute("""
+                            INSERT INTO mcq_options (q_id, opt_a, opt_b, opt_c, opt_d, correct_opt)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, (q_id, row['opt_a'], row['opt_b'], row['opt_c'], row['opt_d'], row['correct_opt']))
+
+                    seeded += 1
+            print(f"Successfully auto-seeded {seeded} questions into the question bank.")
+
+    conn.commit()
+    conn.close()
     print("APEX DB migration complete.")
 
 
