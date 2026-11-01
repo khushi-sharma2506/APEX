@@ -529,19 +529,44 @@ def create_exam(req: CreateExamRequest, user: dict = Depends(require_teacher)):
                else ''.join(random.choices(string.ascii_uppercase + string.digits, k=6)))
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        """INSERT INTO exams(title, created_by, num_questions, duration_secs, mode, start_difficulty, results_released, review_level, window_open, window_close, passkey, target_batch, late_entry_mins, category, max_attempts)
-           VALUES(?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (req.title, user["username"], req.num_questions, req.duration_secs,
-         req.mode, req.start_difficulty, req.review_level,
-         req.window_open, req.window_close, passkey, req.target_batch, req.late_entry_mins, req.category, req.max_attempts)
-    )
-    exam_id = cursor.lastrowid
-    for tid in ids:
-        cursor.execute("INSERT OR IGNORE INTO exam_topics(exam_id, topic_id) VALUES(?, ?)", (exam_id, tid))
-    conn.commit()
-    conn.close()
-    return {"exam_id": exam_id, "title": req.title, "passkey": passkey}
+    try:
+        # Self-healing migration for exams table
+        for col, col_type in [
+            ("review_level", "TEXT DEFAULT 'score_and_correctness'"),
+            ("results_released_at", "DATETIME"),
+            ("window_open", "TEXT"),
+            ("window_close", "TEXT"),
+            ("target_batch", "TEXT DEFAULT 'All'"),
+            ("late_entry_mins", "INTEGER DEFAULT 15"),
+            ("category", "TEXT DEFAULT 'Formal'"),
+            ("max_attempts", "INTEGER DEFAULT 1"),
+            ("passkey", "TEXT"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE exams ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass
+        conn.commit()
+
+        cursor.execute(
+            """INSERT INTO exams(title, created_by, num_questions, duration_secs, mode, start_difficulty, results_released, review_level, window_open, window_close, passkey, target_batch, late_entry_mins, category, max_attempts)
+               VALUES(?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (req.title, user["username"], req.num_questions, req.duration_secs,
+             req.mode, req.start_difficulty, req.review_level,
+             req.window_open, req.window_close, passkey, req.target_batch, req.late_entry_mins, req.category, req.max_attempts)
+        )
+        exam_id = cursor.lastrowid
+        for tid in ids:
+            cursor.execute("INSERT OR IGNORE INTO exam_topics(exam_id, topic_id) VALUES(?, ?)", (exam_id, tid))
+        conn.commit()
+        return {"exam_id": exam_id, "title": req.title, "passkey": passkey}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, f"Error creating exam: {str(e)}")
+    finally:
+        conn.close()
 
 class ReleaseExamRequest(BaseModel):
     released: bool

@@ -210,15 +210,23 @@ def migrate_db():
         )
     """)
 
-    # Additional scheduling and batch constraints for exams
-    try: cursor.execute("ALTER TABLE exams ADD COLUMN window_open TEXT")
-    except sqlite3.OperationalError: pass
-    try: cursor.execute("ALTER TABLE exams ADD COLUMN window_close TEXT")
-    except sqlite3.OperationalError: pass
-    try: cursor.execute("ALTER TABLE exams ADD COLUMN target_batch TEXT DEFAULT 'All'")
-    except sqlite3.OperationalError: pass
-    try: cursor.execute("ALTER TABLE exams ADD COLUMN late_entry_mins INTEGER DEFAULT 15")
-    except sqlite3.OperationalError: pass
+    # Ensure all exam columns exist (migration for existing sqlite dbs)
+    for col, col_type in [
+        ("review_level", "TEXT DEFAULT 'score_and_correctness'"),
+        ("results_released_at", "DATETIME"),
+        ("window_open", "TEXT"),
+        ("window_close", "TEXT"),
+        ("target_batch", "TEXT DEFAULT 'All'"),
+        ("late_entry_mins", "INTEGER DEFAULT 15"),
+        ("category", "TEXT DEFAULT 'Formal'"),
+        ("max_attempts", "INTEGER DEFAULT 1"),
+        ("passkey", "TEXT"),
+    ]:
+        try:
+            cursor.execute(f"ALTER TABLE exams ADD COLUMN {col} {col_type}")
+        except sqlite3.OperationalError:
+            pass
+
     try: cursor.execute("ALTER TABLE student_sessions ADD COLUMN started_at TEXT")
     except sqlite3.OperationalError: pass
 
