@@ -1053,7 +1053,18 @@ def get_results(session_id: int, student_id: str):
         }
 
     total_score = sum((r["marks_awarded"] or 0) for r in responses)
-    max_score = sum((r["marks"] or 0) for r in responses)
+    answered_marks = sum((r["marks"] or 0) for r in responses)
+
+    # Calculate full exam maximum marks
+    num_q = exam.get("num_questions") or 20
+    if len(responses) > 0 and answered_marks > 0:
+        avg_marks_per_q = answered_marks / len(responses)
+        max_score = int(round(avg_marks_per_q * num_q))
+    else:
+        max_score = num_q * 2  # default 2 marks per question
+
+    if max_score < answered_marks:
+        max_score = answered_marks
 
     res = {
         "status": "released",
@@ -1062,6 +1073,8 @@ def get_results(session_id: int, student_id: str):
         "exam_title": exam["title"],
         "total_score": total_score,
         "max_score": max_score,
+        "total_questions": num_q,
+        "answered_questions": len(responses),
         "submitted_at": s["submitted_at"]
     }
 
@@ -1139,7 +1152,18 @@ def teacher_session_review(session_id: int, user: dict = Depends(require_teacher
     conn.close()
 
     total_marks = sum(r["marks_awarded"] or 0 for r in responses)
-    max_marks = sum(r["marks"] or 0 for r in responses)
+    answered_marks = sum(r["marks"] or 0 for r in responses)
+
+    # Calculate full exam maximum marks
+    num_q = exam.get("num_questions") or 20 if exam else 20
+    if len(responses) > 0 and answered_marks > 0:
+        avg_marks_per_q = answered_marks / len(responses)
+        max_marks = int(round(avg_marks_per_q * num_q))
+    else:
+        max_marks = num_q * 2
+
+    if max_marks < answered_marks:
+        max_marks = answered_marks
 
     return {
         "session_id": session_id,
@@ -1147,6 +1171,8 @@ def teacher_session_review(session_id: int, user: dict = Depends(require_teacher
         "exam_title": exam["title"] if exam else "Exam",
         "total_marks": total_marks,
         "max_marks": max_marks,
+        "total_questions": num_q,
+        "answered_questions": len(responses),
         "submitted_at": s["submitted_at"],
         "responses": [dict(r) for r in responses]
     }
