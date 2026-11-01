@@ -19,6 +19,21 @@ def get_db_connection():
     conn.execute("PRAGMA journal_mode = WAL")  # Write-Ahead Logging for concurrency
     conn.execute("PRAGMA synchronous = NORMAL")
     conn.execute("PRAGMA busy_timeout = 5000")
+
+    # Self-healing column check for subjects table
+    try:
+        cursor = conn.cursor()
+        cursor.execute("ALTER TABLE subjects ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass
+    try:
+        cursor = conn.cursor()
+        cursor.execute("ALTER TABLE subjects ADD COLUMN owner TEXT DEFAULT NULL")
+        conn.commit()
+    except Exception:
+        pass
+
     return conn
 
 
