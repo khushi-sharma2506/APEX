@@ -151,18 +151,40 @@ class CreateSubjectReq(BaseModel):
 def create_subject(req: CreateSubjectReq, user: dict = Depends(require_teacher)):
     conn = get_db_connection()
     cursor = conn.cursor()
-    existing = cursor.execute("SELECT * FROM subjects WHERE subject_name=? AND (is_private=0 OR owner=?)", (req.subject_name, user['username'])).fetchone()
-    if existing:
+    try:
+        # Ensure columns exist on database
+        try: cursor.execute("ALTER TABLE subjects ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE subjects ADD COLUMN owner TEXT DEFAULT NULL")
+        except sqlite3.OperationalError: pass
+        conn.commit()
+
+        name = req.subject_name.strip()
+        if not name:
+            raise HTTPException(400, "Subject name cannot be empty")
+
+        existing = cursor.execute(
+            "SELECT * FROM subjects WHERE LOWER(subject_name)=LOWER(?) AND (is_private=0 OR owner=?)", 
+            (name, user['username'])
+        ).fetchone()
+        if existing:
+            raise HTTPException(400, "Subject or private pool with this name already exists")
+        
+        is_priv = 1 if req.is_private else 0
+        cursor.execute(
+            "INSERT INTO subjects (subject_name, is_private, owner) VALUES (?, ?, ?)", 
+            (name, is_priv, user['username'])
+        )
+        sub_id = cursor.lastrowid
+        conn.commit()
+        return {"subject_id": sub_id, "subject_name": name, "is_private": is_priv, "owner": user['username']}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, f"Database error creating pool: {str(e)}")
+    finally:
         conn.close()
-        raise HTTPException(400, "Subject already exists")
-    
-    is_priv = 1 if req.is_private else 0
-    cursor.execute("INSERT INTO subjects (subject_name, is_private, owner) VALUES (?, ?, ?)", 
-                   (req.subject_name, is_priv, user['username']))
-    sub_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    return {"subject_id": sub_id, "subject_name": req.subject_name, "is_private": is_priv, "owner": user['username']}
 
 @app.get("/topics")
 def get_topics(subject_id: Optional[int] = None):
