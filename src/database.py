@@ -64,9 +64,15 @@ def migrate_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS subjects (
             subject_id   INTEGER PRIMARY KEY AUTOINCREMENT,
-            subject_name TEXT NOT NULL UNIQUE
+            subject_name TEXT NOT NULL UNIQUE,
+            is_private   INTEGER NOT NULL DEFAULT 0,
+            owner        TEXT DEFAULT NULL
         )
     """)
+    try: cursor.execute("ALTER TABLE subjects ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+    except sqlite3.OperationalError: pass
+    try: cursor.execute("ALTER TABLE subjects ADD COLUMN owner TEXT DEFAULT NULL")
+    except sqlite3.OperationalError: pass
     
     # Topics mapped to subjects and course units
     cursor.execute("""
