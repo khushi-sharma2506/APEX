@@ -68,6 +68,42 @@ flowchart LR
 
 ---
 
+## 📸 Platform Interface & Screenshots
+
+<div align="center">
+
+### 1. Student Adaptive Assessment Interface
+*Real-time Computer-Adaptive Testing (CAT) adjusting difficulty based on response correctness:*
+<img src="docs/screenshots/landing_adaptive.png" alt="Student Adaptive Testing" width="850" />
+
+<br/><br/>
+
+### 2. Teacher Dashboard with Embedded APEX AI Assistant
+*Teacher portal featuring quick stats and an academic conversational assistant for drafting test materials:*
+<img src="docs/screenshots/teacher_dashboard_ai.png" alt="Teacher Dashboard and AI Assistant" width="850" />
+
+<br/><br/>
+
+### 3. Detailed Student Answer Sheet & Marking Inspector
+*Instructors inspect individual answer choices, marks awarded, and correctness breakdown:*
+<img src="docs/screenshots/student_answer_sheet.png" alt="Student Answer Sheet and Grading" width="850" />
+
+<br/><br/>
+
+### 4. Dynamic Question Bank Management
+*Search, filter, edit, and curate questions across curriculum units with private pool isolation:*
+<img src="docs/screenshots/question_bank.png" alt="Question Bank Interface" width="850" />
+
+<br/><br/>
+
+### 5. OS-Level Concurrency & LRU Cache Real-Time Performance Monitor
+*Live latency benchmark and eviction visualizer under concurrent student loads:*
+<img src="docs/screenshots/realtime_performance.png" alt="Real-time Performance and LRU Cache Monitor" width="850" />
+
+</div>
+
+---
+
 ## 🗄️ Database Architecture & Relational Schema
 
 APEX utilizes an SQLite database configured in **WAL (Write-Ahead Logging) mode** with foreign key constraints enabled for high-concurrency read/write operations during live tests.
