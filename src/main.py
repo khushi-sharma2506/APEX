@@ -1055,14 +1055,17 @@ def get_results(session_id: int, student_id: str):
     total_score = sum((r["marks_awarded"] or 0) for r in responses)
     answered_marks = sum((r["marks"] or 0) for r in responses)
 
-    # Calculate full exam maximum marks
+    # In adaptive mode or standard exams, each question has an assigned mark weight.
+    # When an exam specifies target_marks or N questions, calculate clean whole marks.
     num_q = exam.get("num_questions") or 20
-    if len(responses) > 0 and answered_marks > 0:
-        avg_marks_per_q = answered_marks / len(responses)
-        max_score = int(round(avg_marks_per_q * num_q))
-    else:
-        max_score = num_q * 2  # default 2 marks per question
+    # Determine marks per question (default is 2 marks per question in standard bank)
+    marks_per_q = 2
+    if len(responses) > 0:
+        actual_avg = round(answered_marks / len(responses))
+        if actual_avg in (1, 2, 3, 5):
+            marks_per_q = actual_avg
 
+    max_score = num_q * marks_per_q
     if max_score < answered_marks:
         max_score = answered_marks
 
@@ -1154,14 +1157,14 @@ def teacher_session_review(session_id: int, user: dict = Depends(require_teacher
     total_marks = sum(r["marks_awarded"] or 0 for r in responses)
     answered_marks = sum(r["marks"] or 0 for r in responses)
 
-    # Calculate full exam maximum marks
     num_q = exam.get("num_questions") or 20 if exam else 20
-    if len(responses) > 0 and answered_marks > 0:
-        avg_marks_per_q = answered_marks / len(responses)
-        max_marks = int(round(avg_marks_per_q * num_q))
-    else:
-        max_marks = num_q * 2
+    marks_per_q = 2
+    if len(responses) > 0:
+        actual_avg = round(answered_marks / len(responses))
+        if actual_avg in (1, 2, 3, 5):
+            marks_per_q = actual_avg
 
+    max_marks = num_q * marks_per_q
     if max_marks < answered_marks:
         max_marks = answered_marks
 
