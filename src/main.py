@@ -46,6 +46,17 @@ _latency_log: list[float] = []
 @app.on_event("startup")
 def startup_event():
     migrate_db()
+    # Ensure subjects schema has private pool columns
+    try:
+        conn = get_db_connection()
+        try: conn.execute("ALTER TABLE subjects ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+        except Exception: pass
+        try: conn.execute("ALTER TABLE subjects ADD COLUMN owner TEXT DEFAULT NULL")
+        except Exception: pass
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Startup schema check error: {e}")
 
 
 class LoginRequest(BaseModel):
