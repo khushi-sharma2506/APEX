@@ -270,8 +270,6 @@ def migrate_db():
         )
     """)
 
-    conn.commit()
-    conn.close()
     # Auto-seed question bank from CSV if questions table is empty (e.g. fresh cloud deployment)
     cursor.execute("SELECT COUNT(*) FROM questions")
     q_count = cursor.fetchone()[0]
