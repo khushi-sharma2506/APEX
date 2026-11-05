@@ -58,11 +58,11 @@ def login(req: LoginRequest, response: Response):
     user = conn.execute("SELECT * FROM users WHERE username=?", (req.username,)).fetchone()
     if not user:
         conn.close()
-        raise HTTPException(401, "Wrong enrollment number or password")
+        raise HTTPException(401, "Invalid username or password")
     
     if not bcrypt.checkpw(req.password.encode(), user["password_hash"].encode()):
         conn.close()
-        raise HTTPException(401, "Wrong enrollment number or password")
+        raise HTTPException(401, "Invalid username or password")
     
     token = str(uuid.uuid4())
     conn.execute(
@@ -1569,5 +1569,210 @@ def chat_assistant(req: ChatRequest, user: Optional[dict] = Depends(get_optional
     return process_chat(req.message, user_role=role, context=req.context)
 
 
+
+# ADMIN 
+
+class AdminCreateUserReq(BaseModel):
+    username: str
+    password: str
+    role: str  
+
+class AdminUpdateUserReq(BaseModel):
+    new_password: Optional[str] = None   
+    new_role: Optional[str] = None       
+
+@app.get("/admin/stats")
+def admin_stats(user: dict = Depends(require_admin)):
+    """High-level counts: users by role, exams, submissions, and recent logins."""
+    conn = get_db_connection()
+    counts = {r["role"]: r["cnt"] for r in conn.execute(
+        "SELECT role, COUNT(*) AS cnt FROM users GROUP BY role"
+    ).fetchall()}
+    total_exams = conn.execute("SELECT COUNT(*) FROM exams").fetchone()[0]
+    total_submissions = conn.execute("SELECT COUNT(*) FROM student_sessions WHERE submitted_at IS NOT NULL").fetchone()[0]
+    recent_logins = conn.execute(
+        """SELECT username, role, created_at
+           FROM auth_sessions
+           ORDER BY created_at DESC LIMIT 10"""
+    ).fetchall()
+    conn.close()
+    return {
+        "total_students": counts.get("student", 0),
+        "total_teachers": counts.get("teacher", 0),
+        "total_admins":   counts.get("admin",   0),
+        "total_exams":    total_exams,
+        "total_submissions": total_submissions,
+        "recent_logins":  [dict(r) for r in recent_logins],
+    }
+
+@app.get("/admin/users")
+def admin_list_users(user: dict = Depends(require_admin)):
+    """Return all users enriched with activity (tests created for teachers, tests taken for students)."""
+    conn = get_db_connection()
+    rows = conn.execute("SELECT id, username, role FROM users ORDER BY role, username").fetchall()
+    
+    teacher_counts = {r["created_by"]: r["cnt"] for r in conn.execute(
+        "SELECT created_by, COUNT(*) AS cnt FROM exams GROUP BY created_by"
+    ).fetchall()}
+    
+    student_stats = {r["student_id"]: {"taken": r["taken"], "total_score": r["total_marks"]} for r in conn.execute(
+        """SELECT ss.student_id, 
+                  COUNT(DISTINCT ss.session_id) as taken,
+                  COALESCE(SUM(sr.marks_awarded), 0) as total_marks
+           FROM student_sessions ss
+           LEFT JOIN session_responses sr ON ss.session_id = sr.session_id
+           WHERE ss.submitted_at IS NOT NULL
+           GROUP BY ss.student_id"""
+    ).fetchall()}
+    
+    conn.close()
+    
+    results = []
+    for r in rows:
+        u = dict(r)
+        if u["role"] == "teacher":
+            cnt = teacher_counts.get(u["username"], 0)
+            u["exams_created"] = cnt
+            u["activity"] = f"{cnt} exam{'s' if cnt != 1 else ''} created"
+        elif u["role"] == "student":
+            st = student_stats.get(u["username"], {"taken": 0, "total_score": 0})
+            u["exams_taken"] = st["taken"]
+            u["total_score"] = st["total_score"]
+            u["activity"] = f"{st['taken']} test{'s' if st['taken'] != 1 else ''} taken ({st['total_score']} pts)"
+        else:
+            u["activity"] = "System Administrator"
+        results.append(u)
+    return results
+
+@app.get("/admin/users/{username}/activity")
+def admin_user_activity(username: str, user: dict = Depends(require_admin)):
+    """Detailed activity breakdown for a student or teacher with full test credentials, formats, and offline papers."""
+    conn = get_db_connection()
+    target = conn.execute("SELECT id, username, role FROM users WHERE username=?", (username,)).fetchone()
+    if not target:
+        conn.close()
+        raise HTTPException(404, "User not found")
+    
+    target = dict(target)
+    if target["role"] == "teacher":
+        exams = conn.execute("""
+            SELECT exam_id, title, mode, category, target_batch, passkey,
+                   num_questions, duration_secs, window_open, window_close,
+                   late_entry_mins, results_released, review_level, created_at,
+                   (SELECT COUNT(*) FROM student_sessions WHERE exam_id = exams.exam_id AND submitted_at IS NOT NULL) AS submissions_count
+            FROM exams
+            WHERE created_by = ?
+            ORDER BY created_at DESC
+        """, (username,)).fetchall()
+        target["activity_list"] = [dict(x) for x in exams]
+
+        offline_papers = conn.execute("""
+            SELECT gp.paper_id, gp.seed, gp.generated_at, b.blueprint_id, b.title, b.target_marks, s.subject_name
+            FROM generated_papers gp
+            JOIN blueprints b ON gp.blueprint_id = b.blueprint_id
+            LEFT JOIN subjects s ON b.subject_id = s.subject_id
+            WHERE b.created_by = ?
+            ORDER BY gp.generated_at DESC
+        """, (username,)).fetchall()
+        target["offline_papers"] = [dict(x) for x in offline_papers]
+    elif target["role"] == "student":
+        sessions = conn.execute("""
+            SELECT ss.session_id, ss.exam_id, COALESCE(e.title, 'Exam') AS exam_title,
+                   e.mode, e.num_questions, ss.started_at, ss.submitted_at,
+                   COALESCE(SUM(sr.marks_awarded), 0) AS score,
+                   COUNT(sr.response_id) AS total_answered,
+                   COALESCE(SUM(q.marks), 0) AS total_marks
+            FROM student_sessions ss
+            LEFT JOIN exams e ON ss.exam_id = e.exam_id
+            LEFT JOIN session_responses sr ON ss.session_id = sr.session_id
+            LEFT JOIN questions q ON sr.q_id = q.q_id
+            WHERE ss.student_id = ?
+            GROUP BY ss.session_id
+            ORDER BY ss.started_at DESC
+        """, (username,)).fetchall()
+        target["activity_list"] = [dict(x) for x in sessions]
+        target["offline_papers"] = []
+    else:
+        target["activity_list"] = []
+        target["offline_papers"] = []
+    
+    conn.close()
+    return target
+
+@app.post("/admin/users")
+def admin_create_user(req: AdminCreateUserReq, user: dict = Depends(require_admin)):
+    """Create a new user with the given username, password and role."""
+    if req.role not in ("student", "teacher", "admin"):
+        raise HTTPException(400, "role must be 'student', 'teacher', or 'admin'")
+    pw_hash = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
+    conn = get_db_connection()
+    try:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+            (req.username.strip(), pw_hash, req.role)
+        )
+        conn.commit()
+    except Exception:
+        conn.close()
+        raise HTTPException(400, "Username already exists")
+    conn.close()
+    return {"status": "created", "username": req.username, "role": req.role}
+
+@app.patch("/admin/users/{username}")
+def admin_update_user(username: str, req: AdminUpdateUserReq, user: dict = Depends(require_admin)):
+    """Change a user's password and/or role. Pass only the fields you want to change."""
+    if req.new_role and req.new_role not in ("student", "teacher", "admin"):
+        raise HTTPException(400, "role must be 'student', 'teacher', or 'admin'")
+    conn = get_db_connection()
+    target = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+    if not target:
+        conn.close()
+        raise HTTPException(404, "User not found")
+    if req.new_password:
+        pw_hash = bcrypt.hashpw(req.new_password.encode(), bcrypt.gensalt()).decode()
+        conn.execute("UPDATE users SET password_hash=? WHERE username=?", (pw_hash, username))
+    if req.new_role:
+        conn.execute("UPDATE users SET role=? WHERE username=?", (req.new_role, username))
+    conn.commit()
+    conn.close()
+    return {"status": "updated", "username": username}
+
+class AdminDeleteUserReq(BaseModel):
+    admin_password: Optional[str] = None
+
+@app.delete("/admin/users/{username}")
+def admin_delete_user(
+    username: str,
+    admin_password: Optional[str] = None,
+    req: Optional[AdminDeleteUserReq] = Body(None),
+    user: dict = Depends(require_admin)
+):
+    """Delete a user. Require admin password for confirmation. Cannot delete admin accounts."""
+    entered_pw = (req.admin_password if req and req.admin_password else None) or admin_password
+    if not entered_pw:
+        raise HTTPException(400, "Admin password required to confirm deletion")
+
+    conn = get_db_connection()
+    # Verify current admin's password
+    admin_row = conn.execute("SELECT * FROM users WHERE username=?", (user["username"],)).fetchone()
+    if not admin_row or not bcrypt.checkpw(entered_pw.encode(), admin_row["password_hash"].encode()):
+        conn.close()
+        raise HTTPException(403, "Incorrect admin password. Deletion cancelled.")
+
+    target = conn.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+    if not target:
+        conn.close()
+        raise HTTPException(404, "User not found")
+
+    if target["role"] == "admin" or username == user["username"]:
+        conn.close()
+        raise HTTPException(400, "Admin accounts cannot be deleted")
+
+    # Wipe active sessions and user record
+    conn.execute("DELETE FROM auth_sessions WHERE username=?", (username,))
+    conn.execute("DELETE FROM users WHERE username=?", (username,))
+    conn.commit()
+    conn.close()
+    return {"status": "deleted", "username": username}
 if os.path.isdir(_frontend):
     app.mount("/ui", StaticFiles(directory=_frontend, html=True), name="frontend")

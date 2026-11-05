@@ -111,6 +111,7 @@
       <div class="tabs" id="lTabs" role="tablist" aria-label="Account type">
         <button role="tab" data-lr="student" aria-selected="true">Student</button>
         <button role="tab" data-lr="teacher" aria-selected="false">Teacher</button>
+        <button role="tab" data-lr="admin" aria-selected="false">Admin</button>
       </div>
       <form id="lForm" novalidate>
         <label class="field"><span id="lidLabel">Enrollment number</span><input class="input" id="lid" autocomplete="username" placeholder="e.g. STU12345"><div class="err" id="lidErr" hidden></div></label>
@@ -138,6 +139,81 @@
 
   <div class="main">
     <div class="page">
+
+      <!-- ADMIN: dashboard -->
+      <section class="view" id="view-admin" hidden>
+        <div class="head">
+          <div><h1>Admin Dashboard</h1><p>Manage all users on this system.</p></div>
+          <button class="btn primary" id="adminAddUser">Add user</button>
+        </div>
+
+        <!-- stats row -->
+        <div class="kpis" id="adminStats">
+          <div class="card kpi"><div class="sub">Students</div><div class="v num" id="adminCountStudent">0</div></div>
+          <div class="card kpi"><div class="sub">Teachers</div><div class="v num" id="adminCountTeacher">0</div></div>
+          <div class="card kpi"><div class="sub">Total Exams</div><div class="v num" id="adminCountExams">0</div></div>
+          <div class="card kpi"><div class="sub">Test Submissions</div><div class="v num" id="adminCountSubmissions">0</div></div>
+        </div>
+
+        <!-- user table -->
+        <div class="card" style="margin-top:16px">
+          <div class="pad" style="padding-bottom:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+            <div>
+              <h2 style="margin:0">All users</h2>
+              <p class="sub" style="margin:2px 0 0;font-size:13px">Click any row to open the user's detailed test dashboard.</p>
+            </div>
+            <div style="flex:1"></div>
+            <input class="input" id="adminSearch" placeholder="Filter users..." style="max-width:220px;padding:6px 10px;font-size:13px">
+          </div>
+          <div class="scroll"><table class="tbl">
+            <thead><tr><th>Username</th><th>Role</th><th>Quick Summary</th><th style="text-align:right">Actions</th></tr></thead>
+            <tbody id="adminUserRows"></tbody>
+          </table></div>
+        </div>
+
+        <!-- recent logins -->
+        <div class="card" style="margin-top:16px">
+          <div class="pad" style="padding-bottom:12px"><h2>Recent logins</h2></div>
+          <div class="scroll"><table class="tbl">
+            <thead><tr><th>Username</th><th>Role</th><th>Time</th></tr></thead>
+            <tbody id="adminLoginRows"></tbody>
+          </table></div>
+        </div>
+      </section>
+
+      <!-- ADMIN: Dedicated User Detail Page -->
+      <section class="view" id="view-admin-user" hidden>
+        <div class="head">
+          <div>
+            <button class="btn quiet" id="adminBackToUsers" style="margin-bottom:8px;padding:4px 8px;display:inline-flex;align-items:center;gap:6px;font-size:13px">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              Back to all users
+            </button>
+            <div style="display:flex;align-items:center;gap:12px">
+              <h1 id="adminDetailUserTitle" style="margin:0">User Details</h1>
+              <span class="chip" id="adminDetailUserRole" style="font-size:13px;padding:3px 10px;text-transform:capitalize"></span>
+            </div>
+            <p id="adminDetailUserSub" style="margin-top:4px">Full record of exams and credentials.</p>
+          </div>
+        </div>
+
+        <!-- Detail KPIs -->
+        <div class="kpis" id="adminDetailKpis" style="margin-bottom:18px"></div>
+
+        <!-- Detail Table -->
+        <div class="card">
+          <div class="pad" style="padding-bottom:12px">
+            <h2 id="adminDetailTableHeading" style="margin:0">Exams</h2>
+          </div>
+          <div class="scroll">
+            <table class="tbl">
+              <thead id="adminDetailTableHead"></thead>
+              <tbody id="adminDetailTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <!-- TEACHER: dashboard -->
       <section class="view" id="view-tdash" hidden>
         <div class="head"><div><h1 id="tdGreet">Good morning</h1><p>Here is what needs your attention today.</p></div>
@@ -154,6 +230,28 @@
             <div class="stack" role="img" aria-label="150 easy, 200 medium and 150 hard questions"><i style="width:30%;background:var(--ok)"></i><i style="width:40%;background:var(--c3)"></i><i style="width:30%;background:var(--bad)"></i></div>
             <div class="leg2"><span>Easy <b>150</b></span><span>Medium <b>200</b></span><span>Hard <b>150</b></span></div>
             <p class="sub" style="margin-top:14px">250 questions each for Operating Systems and DBMS, split evenly between MCQ and subjective.</p>
+          </div>
+        </div>
+
+        <!-- Offline Generated Papers Table (for teachers) -->
+        <div class="card" id="adminOfflinePapersCard" style="margin-top:18px;display:none">
+          <div class="pad" style="padding-bottom:12px">
+            <h2 style="margin:0">Offline Question Papers (Printed Papers)</h2>
+            <p class="sub" style="margin:2px 0 0;font-size:13px">University question papers generated for offline exam halls.</p>
+          </div>
+          <div class="scroll">
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Paper Title / Subject</th>
+                  <th>Target Marks</th>
+                  <th>Seed</th>
+                  <th>Generated Date</th>
+                  <th style="text-align:right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="adminOfflinePapersBody"></tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -550,6 +648,94 @@
   <div class="dlg-foot" style="padding:14px 24px;background:var(--sunken);display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--line)">
     <button class="btn" id="confirmCancel">Cancel</button>
     <button class="btn" id="confirmOk">Confirm</button>
+  </div>
+</dialog>
+
+<!-- Add User Dialog with Role Dropdown -->
+<dialog id="dlgAddUser" style="max-width:440px;border-radius:12px;padding:0;border:1px solid var(--line);box-shadow:0 16px 36px rgba(0,0,0,0.18)">
+  <form id="formAddUser" method="dialog">
+    <div class="dlg-body" style="padding:22px 24px">
+      <h2 style="font-size:20px;letter-spacing:-.01em;margin:0 0 8px">Add user</h2>
+      <p class="sub" style="margin:0 0 16px;font-size:14px">Create a new student or teacher account.</p>
+      
+      <label class="field" style="margin-bottom:14px;display:block">
+        <span>Username</span>
+        <input class="input" id="addUsername" required placeholder="e.g. STU12345 or prof@geu.ac.in" autocomplete="off" style="width:100%;margin-top:6px">
+      </label>
+
+      <label class="field" style="margin-bottom:14px;display:block">
+        <span>Initial Password</span>
+        <input class="input" id="addPassword" type="password" required placeholder="••••••••" autocomplete="new-password" style="width:100%;margin-top:6px">
+      </label>
+
+      <label class="field" style="margin-bottom:8px;display:block">
+        <span>Role</span>
+        <select class="input" id="addRole" style="width:100%;height:40px;margin-top:6px;cursor:pointer;background:var(--surface)">
+          <option value="student">Student</option>
+          <option value="teacher">Teacher</option>
+        </select>
+      </label>
+      <div class="msg bad" id="addUserErr" style="display:none;margin-top:10px;color:var(--bad);font-size:13px"></div>
+    </div>
+    <div class="dlg-foot" style="padding:14px 24px;background:var(--sunken);display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--line)">
+      <button type="button" class="btn" id="cancelAddUser">Cancel</button>
+      <button type="submit" class="btn primary" id="okAddUser">Create</button>
+    </div>
+  </form>
+</dialog>
+
+
+
+
+
+<!-- Admin Change Result Visibility Dialog -->
+<dialog id="dlgAdminVisibility" style="max-width:440px;border-radius:12px;padding:0;border:1px solid var(--line);box-shadow:0 16px 36px rgba(0,0,0,0.18)">
+  <div class="dlg-body" style="padding:22px 24px">
+    <h2 style="font-size:20px;letter-spacing:-.01em;margin:0 0 6px" id="adminVisTitle">Change Result Visibility</h2>
+    <p class="sub" style="margin:0 0 16px;font-size:14px" id="adminVisSub">Control whether and how much students can see after this exam.</p>
+    
+    <div style="display:flex;flex-direction:column;gap:8px" id="adminVisOptions">
+      <label class="lvl" style="padding:10px 12px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+        <input type="radio" name="adminVisLvl" value="score_and_correctness" style="margin-top:3px">
+        <div><b>Score & Correctness</b><div class="sub" style="font-size:12px">Students see their score and which questions were correct/incorrect.</div></div>
+      </label>
+      <label class="lvl" style="padding:10px 12px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+        <input type="radio" name="adminVisLvl" value="full_review" style="margin-top:3px">
+        <div><b>Full Review</b><div class="sub" style="font-size:12px">Students see full answers, question explanations, and correct options.</div></div>
+      </label>
+      <label class="lvl" style="padding:10px 12px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+        <input type="radio" name="adminVisLvl" value="score_only" style="margin-top:3px">
+        <div><b>Score Only</b><div class="sub" style="font-size:12px">Students only see their final score without question details.</div></div>
+      </label>
+      <label class="lvl" style="padding:10px 12px;border:1px solid var(--line);border-radius:8px;display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+        <input type="radio" name="adminVisLvl" value="hidden" style="margin-top:3px">
+        <div><b style="color:var(--bad)">Hide Results</b><div class="sub" style="font-size:12px">Results will not be visible to students at all.</div></div>
+      </label>
+    </div>
+  </div>
+  <div class="dlg-foot" style="padding:14px 24px;background:var(--sunken);display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--line)">
+    <button class="btn" id="cancelAdminVis">Cancel</button>
+    <button class="btn primary" id="saveAdminVis">Save Visibility</button>
+  </div>
+</dialog>
+
+<!-- Student Answered Paper Review Dialog (for admin) -->
+<dialog id="dlgStudentPaperReview" class="wide" style="max-width:800px;border-radius:12px;padding:0;border:1px solid var(--line);box-shadow:0 16px 36px rgba(0,0,0,0.18)">
+  <div class="dlg-body" style="padding:22px 24px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+      <div>
+        <h2 style="font-size:20px;letter-spacing:-.01em;margin:0 0 4px" id="revPaperTitle">Student Answered Paper</h2>
+        <p class="sub" style="margin:0;font-size:14px" id="revPaperSub">Questions attempted, student responses, and marks awarded.</p>
+      </div>
+      <div style="text-align:right">
+        <div class="v num" id="revPaperScore" style="font-size:22px;color:var(--ink)">0 / 0</div>
+        <div class="sub" style="font-size:12px">Total Marks</div>
+      </div>
+    </div>
+    <div class="scroll" style="max-height:440px" id="revPaperList"></div>
+  </div>
+  <div class="dlg-foot" style="padding:14px 24px;background:var(--sunken);display:flex;justify-content:flex-end;border-top:1px solid var(--line)">
+    <button class="btn" id="closeStudentPaperReview">Close</button>
   </div>
 </dialog>
 

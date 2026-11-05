@@ -95,4 +95,12 @@ export const api = {
   cacheStats: () => req("GET", "/cache/stats"),
   cacheReset: () => req("POST", "/cache/reset"),
   chat: (message, context = null) => req("POST", "/chat", null, { message, context }),
+
+  // Admin endpoints
+  adminStats: () => req("GET", "/admin/stats"),
+  adminUsers: () => req("GET", "/admin/users"),
+  adminUserActivity: (username) => req("GET", `/admin/users/${username}/activity`),
+  adminCreateUser: (data) => req("POST", "/admin/users", null, data),
+  adminUpdateUser: (username, data) => req("PATCH", `/admin/users/${username}`, null, data),
+  adminDeleteUser: (username, admin_password) => req("DELETE", `/admin/users/${username}`, { admin_password }, { admin_password }),
 };
