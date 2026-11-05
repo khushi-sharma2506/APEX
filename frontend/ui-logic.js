@@ -2205,7 +2205,7 @@ function renderAdminUserTable(users) {
         <td><span class="chip">${esc(u.role)}</span></td>
         <td style="color:var(--sub);font-size:13px">${esc(activityText)}</td>
         <td style="text-align:right;white-space:nowrap">  
-        <button class="btn quiet" data-admin-pw="${esc(u.username)}" title="Reset or change password in your ass">Reset Password</button>
+        <button class="btn quiet" data-admin-pw="${esc(u.username)}" title="Reset or change password ">Reset Password</button>
           ${isSelfOrAdmin ? '' : `<button class="btn quiet danger" data-admin-del="${esc(u.username)}" title="Delete user account">Remove</button>`}
         </td>
       </tr>`;
@@ -2327,7 +2327,7 @@ async function openAdminUserDashboard(username) {
 
       kpisEl.innerHTML = `
         <div class="card kpi"><div class="sub">Online Exams Created</div><div class="v num">${totalCreated}</div></div>
-        <div class="card kpi"><div class="sub">Total Submissions Received</div><div class="v num">${totalSubmissions}</div></div>
+        <div class="card kpi"><div class="sub">Total Submissions Received </div><div class="v num">${totalSubmissions}</div></div>
         <div class="card kpi"><div class="sub">Offline Question Papers</div><div class="v num">${totalOffline}</div></div>
       `;
 
