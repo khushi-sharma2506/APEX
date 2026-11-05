@@ -1843,14 +1843,17 @@ async function openReview(resOrSessionId) {
   const totalScore = res.total_score != null ? res.total_score : 0;
   const maxScore = res.max_score != null ? res.max_score : 0;
   const lvlDesc = (LVL && LVL[lvl]) ? LVL[lvl][1] : '';
+  const attemptInfo = (res.total_questions && res.answered_questions != null)
+    ? ` (${res.answered_questions} of ${res.total_questions} questions attempted)`
+    : '';
 
   $('#revTitle').textContent = res.exam_title || 'Exam Result';
-  $('#revSub').textContent = `Your score: ${totalScore} / ${maxScore} marks • ${lvlDesc}`;
+  $('#revSub').textContent = `Your score: ${totalScore} / ${maxScore} marks${attemptInfo} • ${lvlDesc}`;
 
   if (lvl === 'score_only') {
     $('#revBody').innerHTML = `
       <div style="padding:24px;text-align:center">
-        <h3 style="font-size:20px;margin-bottom:8px">Score: ${totalScore} / ${maxScore} marks</h3>
+        <h3 style="font-size:20px;margin-bottom:8px">Score: ${totalScore} / ${maxScore} marks${attemptInfo}</h3>
         <p class="sub">Your teacher has configured results to show score only for this exam.</p>
       </div>`;
   } else if (!res.responses || !res.responses.length) {

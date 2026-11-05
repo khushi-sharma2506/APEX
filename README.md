@@ -1,5 +1,15 @@
 # Adaptive Paper Engine for eXaminations (APEX)
 
+[![Live Demo](https://img.shields.io/badge/Demo-Live%20on%20Render-brightgreen?style=for-the-badge&logo=render)](https://apex-q0dt.onrender.com/ui/)
+[![Python](https://img.shields.io/badge/Python-3.12-blue?style=for-the-badge&logo=python)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-teal?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Gemini](https://img.shields.io/badge/Google%20Gemini-3.5--flash--lite-orange?style=for-the-badge&logo=google)](https://aistudio.google.com/)
+
+> 🌐 **Live Public Deployment:** **[https://apex-q0dt.onrender.com/ui/](https://apex-q0dt.onrender.com/ui/)**
+> 
+> - **Teacher Demo:** `teacher` / `pass123`
+> - **Student Demo:** `student` / `pass123`
+
 An OS-Optimized Institutional Assessment and Dynamic Question Bank Generator. This is a combined Project-Based Learning (PBL) project integrating **Operating Systems (OS)** concurrency concepts and **Database Management Systems (DBMS)** 3NF relational design.
 
 ---
@@ -55,6 +65,42 @@ flowchart LR
     Assistant -.->|REST API| Gemini["Google Gemini API\n(gemini-3.5-flash)"]
     CSV -->|import_csv.py| DB
 ```
+
+---
+
+## 📸 Platform Interface & Screenshots
+
+<div align="center">
+
+### 1. Student Adaptive Assessment Interface
+*Real-time Computer-Adaptive Testing (CAT) adjusting difficulty based on response correctness:*
+<img src="docs/screenshots/landing_adaptive.png" alt="Student Adaptive Testing" width="850" />
+
+<br/><br/>
+
+### 2. Teacher Dashboard with Embedded APEX AI Assistant
+*Teacher portal featuring quick stats and an academic conversational assistant for drafting test materials:*
+<img src="docs/screenshots/teacher_dashboard_ai.png" alt="Teacher Dashboard and AI Assistant" width="850" />
+
+<br/><br/>
+
+### 3. Detailed Student Answer Sheet & Marking Inspector
+*Instructors inspect individual answer choices, marks awarded, and correctness breakdown:*
+<img src="docs/screenshots/student_answer_sheet.png" alt="Student Answer Sheet and Grading" width="850" />
+
+<br/><br/>
+
+### 4. Dynamic Question Bank Management
+*Search, filter, edit, and curate questions across curriculum units with private pool isolation:*
+<img src="docs/screenshots/question_bank.png" alt="Question Bank Interface" width="850" />
+
+<br/><br/>
+
+### 5. OS-Level Concurrency & LRU Cache Real-Time Performance Monitor
+*Live latency benchmark and eviction visualizer under concurrent student loads:*
+<img src="docs/screenshots/realtime_performance.png" alt="Real-time Performance and LRU Cache Monitor" width="850" />
+
+</div>
 
 ---
 

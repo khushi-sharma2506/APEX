@@ -46,6 +46,17 @@ _latency_log: list[float] = []
 @app.on_event("startup")
 def startup_event():
     migrate_db()
+    # Ensure subjects schema has private pool columns
+    try:
+        conn = get_db_connection()
+        try: conn.execute("ALTER TABLE subjects ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+        except Exception: pass
+        try: conn.execute("ALTER TABLE subjects ADD COLUMN owner TEXT DEFAULT NULL")
+        except Exception: pass
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Startup schema check error: {e}")
 
 
 class LoginRequest(BaseModel):
@@ -151,18 +162,40 @@ class CreateSubjectReq(BaseModel):
 def create_subject(req: CreateSubjectReq, user: dict = Depends(require_teacher)):
     conn = get_db_connection()
     cursor = conn.cursor()
-    existing = cursor.execute("SELECT * FROM subjects WHERE subject_name=? AND (is_private=0 OR owner=?)", (req.subject_name, user['username'])).fetchone()
-    if existing:
+    try:
+        # Ensure columns exist on database
+        try: cursor.execute("ALTER TABLE subjects ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError: pass
+        try: cursor.execute("ALTER TABLE subjects ADD COLUMN owner TEXT DEFAULT NULL")
+        except sqlite3.OperationalError: pass
+        conn.commit()
+
+        name = req.subject_name.strip()
+        if not name:
+            raise HTTPException(400, "Subject name cannot be empty")
+
+        existing = cursor.execute(
+            "SELECT * FROM subjects WHERE LOWER(subject_name)=LOWER(?) AND (is_private=0 OR owner=?)", 
+            (name, user['username'])
+        ).fetchone()
+        if existing:
+            raise HTTPException(400, "Subject or private pool with this name already exists")
+        
+        is_priv = 1 if req.is_private else 0
+        cursor.execute(
+            "INSERT INTO subjects (subject_name, is_private, owner) VALUES (?, ?, ?)", 
+            (name, is_priv, user['username'])
+        )
+        sub_id = cursor.lastrowid
+        conn.commit()
+        return {"subject_id": sub_id, "subject_name": name, "is_private": is_priv, "owner": user['username']}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, f"Database error creating pool: {str(e)}")
+    finally:
         conn.close()
-        raise HTTPException(400, "Subject already exists")
-    
-    is_priv = 1 if req.is_private else 0
-    cursor.execute("INSERT INTO subjects (subject_name, is_private, owner) VALUES (?, ?, ?)", 
-                   (req.subject_name, is_priv, user['username']))
-    sub_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    return {"subject_id": sub_id, "subject_name": req.subject_name, "is_private": is_priv, "owner": user['username']}
 
 @app.get("/topics")
 def get_topics(subject_id: Optional[int] = None):
@@ -496,19 +529,44 @@ def create_exam(req: CreateExamRequest, user: dict = Depends(require_teacher)):
                else ''.join(random.choices(string.ascii_uppercase + string.digits, k=6)))
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        """INSERT INTO exams(title, created_by, num_questions, duration_secs, mode, start_difficulty, results_released, review_level, window_open, window_close, passkey, target_batch, late_entry_mins, category, max_attempts)
-           VALUES(?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (req.title, user["username"], req.num_questions, req.duration_secs,
-         req.mode, req.start_difficulty, req.review_level,
-         req.window_open, req.window_close, passkey, req.target_batch, req.late_entry_mins, req.category, req.max_attempts)
-    )
-    exam_id = cursor.lastrowid
-    for tid in ids:
-        cursor.execute("INSERT OR IGNORE INTO exam_topics(exam_id, topic_id) VALUES(?, ?)", (exam_id, tid))
-    conn.commit()
-    conn.close()
-    return {"exam_id": exam_id, "title": req.title, "passkey": passkey}
+    try:
+        # Self-healing migration for exams table
+        for col, col_type in [
+            ("review_level", "TEXT DEFAULT 'score_and_correctness'"),
+            ("results_released_at", "DATETIME"),
+            ("window_open", "TEXT"),
+            ("window_close", "TEXT"),
+            ("target_batch", "TEXT DEFAULT 'All'"),
+            ("late_entry_mins", "INTEGER DEFAULT 15"),
+            ("category", "TEXT DEFAULT 'Formal'"),
+            ("max_attempts", "INTEGER DEFAULT 1"),
+            ("passkey", "TEXT"),
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE exams ADD COLUMN {col} {col_type}")
+            except sqlite3.OperationalError:
+                pass
+        conn.commit()
+
+        cursor.execute(
+            """INSERT INTO exams(title, created_by, num_questions, duration_secs, mode, start_difficulty, results_released, review_level, window_open, window_close, passkey, target_batch, late_entry_mins, category, max_attempts)
+               VALUES(?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (req.title, user["username"], req.num_questions, req.duration_secs,
+             req.mode, req.start_difficulty, req.review_level,
+             req.window_open, req.window_close, passkey, req.target_batch, req.late_entry_mins, req.category, req.max_attempts)
+        )
+        exam_id = cursor.lastrowid
+        for tid in ids:
+            cursor.execute("INSERT OR IGNORE INTO exam_topics(exam_id, topic_id) VALUES(?, ?)", (exam_id, tid))
+        conn.commit()
+        return {"exam_id": exam_id, "title": req.title, "passkey": passkey}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, f"Error creating exam: {str(e)}")
+    finally:
+        conn.close()
 
 class ReleaseExamRequest(BaseModel):
     released: bool
@@ -995,7 +1053,21 @@ def get_results(session_id: int, student_id: str):
         }
 
     total_score = sum((r["marks_awarded"] or 0) for r in responses)
-    max_score = sum((r["marks"] or 0) for r in responses)
+    answered_marks = sum((r["marks"] or 0) for r in responses)
+
+    # In adaptive mode or standard exams, each question has an assigned mark weight.
+    # When an exam specifies target_marks or N questions, calculate clean whole marks.
+    num_q = exam.get("num_questions") or 20
+    # Determine marks per question (default is 2 marks per question in standard bank)
+    marks_per_q = 2
+    if len(responses) > 0:
+        actual_avg = round(answered_marks / len(responses))
+        if actual_avg in (1, 2, 3, 5):
+            marks_per_q = actual_avg
+
+    max_score = num_q * marks_per_q
+    if max_score < answered_marks:
+        max_score = answered_marks
 
     res = {
         "status": "released",
@@ -1004,6 +1076,8 @@ def get_results(session_id: int, student_id: str):
         "exam_title": exam["title"],
         "total_score": total_score,
         "max_score": max_score,
+        "total_questions": num_q,
+        "answered_questions": len(responses),
         "submitted_at": s["submitted_at"]
     }
 
@@ -1081,7 +1155,18 @@ def teacher_session_review(session_id: int, user: dict = Depends(require_teacher
     conn.close()
 
     total_marks = sum(r["marks_awarded"] or 0 for r in responses)
-    max_marks = sum(r["marks"] or 0 for r in responses)
+    answered_marks = sum(r["marks"] or 0 for r in responses)
+
+    num_q = exam.get("num_questions") or 20 if exam else 20
+    marks_per_q = 2
+    if len(responses) > 0:
+        actual_avg = round(answered_marks / len(responses))
+        if actual_avg in (1, 2, 3, 5):
+            marks_per_q = actual_avg
+
+    max_marks = num_q * marks_per_q
+    if max_marks < answered_marks:
+        max_marks = answered_marks
 
     return {
         "session_id": session_id,
@@ -1089,6 +1174,8 @@ def teacher_session_review(session_id: int, user: dict = Depends(require_teacher
         "exam_title": exam["title"] if exam else "Exam",
         "total_marks": total_marks,
         "max_marks": max_marks,
+        "total_questions": num_q,
+        "answered_questions": len(responses),
         "submitted_at": s["submitted_at"],
         "responses": [dict(r) for r in responses]
     }
