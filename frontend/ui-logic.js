@@ -2205,7 +2205,7 @@ function renderAdminUserTable(users) {
         <td><span class="chip">${esc(u.role)}</span></td>
         <td style="color:var(--sub);font-size:13px">${esc(activityText)}</td>
         <td style="text-align:right;white-space:nowrap">  
-        <button class="btn quiet" data-admin-pw="${esc(u.username)}" title="Reset or change password">Reset Password</button>
+        <button class="btn quiet" data-admin-pw="${esc(u.username)}" title="Reset or change password in your ass">Reset Password</button>
           ${isSelfOrAdmin ? '' : `<button class="btn quiet danger" data-admin-del="${esc(u.username)}" title="Delete user account">Remove</button>`}
         </td>
       </tr>`;

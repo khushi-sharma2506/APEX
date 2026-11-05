@@ -156,7 +156,7 @@ dialog::backdrop{background:rgba(20,14,10,.5)}
 .slots{display:flex;flex-wrap:wrap;gap:3px;margin-top:14px}
 .slot{width:13px;height:13px;border-radius:3px;background:var(--sunken)}
 .evicted{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
-.chip{display:inline-flex;height:24px;align-items:center;padding:0 8px;border-radius:6px;background:var(--sunken);font-size:12px;font-variant-numeric:tabular-nums}
+.chip{display:inline-flex;white-space:nowrap;padding:4px 10px;align-items:center;padding:0 8px;border-radius:6px;background:var(--sunken);font-size:12px;font-variant-numeric:tabular-nums}
 
 @media (max-width:1000px){
   .two,.bp,.cols{grid-template-columns:1fr}
