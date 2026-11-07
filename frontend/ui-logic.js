@@ -90,7 +90,7 @@ const NAV = {
     ['texams', 'Exams', 'clip'],
     ['bank', 'Question bank', 'db'],
     ['create-exam', 'Create exam', 'layout'],
-    ['blueprint', 'Question paper', 'clip'],
+    ['blueprint', 'Generate Question Paper', 'clip'],
     ['perf', 'Performance', 'pulse']
   ]
 };

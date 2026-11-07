@@ -1139,7 +1139,9 @@ def teacher_session_review(session_id: int, user: dict = Depends(require_teacher
     if not s:
         conn.close()
         raise HTTPException(404, "Session not found")
-    exam = conn.execute("SELECT title FROM exams WHERE exam_id=?", (s["exam_id"],)).fetchone()
+    s = dict(s)
+    exam_row = conn.execute("SELECT * FROM exams WHERE exam_id=?", (s["exam_id"],)).fetchone()
+    exam = dict(exam_row) if exam_row else {}
 
     responses = conn.execute("""
         SELECT sr.q_id, sr.chosen_opt, sr.is_correct, sr.marks_awarded,
@@ -1147,7 +1149,7 @@ def teacher_session_review(session_id: int, user: dict = Depends(require_teacher
                mo.opt_a, mo.opt_b, mo.opt_c, mo.opt_d, mo.correct_opt
         FROM session_responses sr
         JOIN questions q ON sr.q_id = q.q_id
-        JOIN topics t ON q.topic_id = t.topic_id
+        LEFT JOIN topics t ON q.topic_id = t.topic_id
         LEFT JOIN mcq_options mo ON q.q_id = mo.q_id
         WHERE sr.session_id = ?
         ORDER BY sr.response_id ASC
@@ -1157,7 +1159,7 @@ def teacher_session_review(session_id: int, user: dict = Depends(require_teacher
     total_marks = sum(r["marks_awarded"] or 0 for r in responses)
     answered_marks = sum(r["marks"] or 0 for r in responses)
 
-    num_q = exam.get("num_questions") or 20 if exam else 20
+    num_q = exam.get("num_questions") or 20
     marks_per_q = 2
     if len(responses) > 0:
         actual_avg = round(answered_marks / len(responses))
@@ -1171,12 +1173,12 @@ def teacher_session_review(session_id: int, user: dict = Depends(require_teacher
     return {
         "session_id": session_id,
         "student_id": s["student_id"],
-        "exam_title": exam["title"] if exam else "Exam",
+        "exam_title": exam.get("title") or "Exam",
         "total_marks": total_marks,
         "max_marks": max_marks,
         "total_questions": num_q,
         "answered_questions": len(responses),
-        "submitted_at": s["submitted_at"],
+        "submitted_at": s.get("submitted_at"),
         "responses": [dict(r) for r in responses]
     }
 
